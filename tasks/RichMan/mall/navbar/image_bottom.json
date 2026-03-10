@@ -55,9 +55,9 @@
   },
   {
     "itemName": "mall_bondlings_on",
-    "imageName": "navbar_mall_bondlings_on.png",
-    "roiFront": "99,417,1021,37",
-    "roiBack": "99,417,1021,37",
+    "imageName": "navbar_get_mall_bondlings_on.png",
+    "roiFront": "919,12,46,36",
+    "roiBack": "919,12,46,36",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "已选中契灵商店"

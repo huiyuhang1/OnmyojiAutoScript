@@ -798,9 +798,9 @@ if __name__ == '__main__':
     config = Config('oas1')
     device = Device(config)
     t = ScriptTask(config, device)
-    # t.run()
-    t.ui_get_current_page()
-    t.ui_goto(page_bondling_fairyland)
+    t.run()
+    # t.ui_get_current_page()
+    # t.ui_goto(page_bondling_fairyland)
     # image = task.screenshot()
 
     # con = config.bondling_fairyland
