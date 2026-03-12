@@ -110,6 +110,7 @@ class Scales(Buy, MallNavbar):
                 logger.info('Scales get success')
                 break
 
+            self.device.click_record_clear()
             if self.appear_then_click(self.I_SCA_SELECT_1, interval=1.6):
                 continue
 
