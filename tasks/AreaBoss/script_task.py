@@ -18,6 +18,7 @@ from tasks.AreaBoss.config_boss import AreaBossFloor
 from module.logger import logger
 from module.exception import TaskEnd
 from module.atom.image import RuleImage
+from datetime import datetime
 from typing import List
 
 
@@ -28,6 +29,12 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
         运行脚本
         :return:
         """
+
+        #0-6点不打鬼王, 直接结束, 等待下次运行
+        if 0 <= datetime.now().hour < 6:
+            self.set_next_run(task='AreaBoss', success=False, finish=False)
+            raise TaskEnd
+
         # 直接手动关闭这个锁定阵容的设置
         self.config.area_boss.general_battle.lock_team_enable = False
         con = self.config.area_boss.boss
