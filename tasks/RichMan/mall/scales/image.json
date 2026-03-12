@@ -20,8 +20,8 @@
   {
     "itemName": "sca_picture_book",
     "imageName": "scales_sca_picture_book.png",
-    "roiFront": "995,258,100,100",
-    "roiBack": "995,258,100,100",
+    "roiFront": "968,482,40,47",
+    "roiBack": "968,482,40,47",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "永生之海"
@@ -110,8 +110,8 @@
   {
     "itemName": "sca_six_star",
     "imageName": "scales_sca_six_star.png",
-    "roiFront": "120,216,97,22",
-    "roiBack": "113,102,1057,157",
+    "roiFront": "540,438,192,173",
+    "roiBack": "540,438,192,173",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "获得的六星"
