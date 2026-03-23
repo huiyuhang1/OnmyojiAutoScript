@@ -27,19 +27,6 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
     def run(self):
         self.run_2()
 
-    def is_ticket(self) -> bool:
-        """
-        如果没有票了，那么就返回False
-        :return:
-        """
-        self.wait_until_appear(self.I_BACK_RED)
-        self.screenshot()
-        cu, res, total = self.O_NUMBER.ocr(self.device.image)
-        if cu == 0 and cu + res == total:
-            logger.warning(f'Execute round failed, no ticket')
-            return False
-        return True
-
     def medal_fire(self) -> bool:
         """
         点击勋章
@@ -88,7 +75,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
         :return:
         """
         # 如果没有票了，就退出
-        if not self.is_ticket():
+        if not self.check_ticket(base=0):
             return False
 
         # 判断是退四打九还是全部打
@@ -108,7 +95,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
 
         # 打九次
         for i in range(9):
-            if not self.is_ticket():
+            if not self.check_ticket(base=0):
                 return False
             self.medal_fire()
             self.run_general_battle(config.general_battle_config)
@@ -302,20 +289,28 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
             logger.warning(f'It is not a valid base {base}')
             base = 0
         self.wait_until_appear(self.I_BACK_RED)
-        self.screenshot()
-        cu, res, total = self.O_NUMBER.ocr(self.device.image)
 
-        if total == 0:
-            self.reward_detect_click(True)
-            # 增加出现聊天框遮挡，处理奖励之后，重新识别票数
+        # OCR 可能存在偶发误差：只有当连续多次都识别为“没票/不够票”时，才认为真的不可打。
+        max_retry = 3
+        for i in range(max_retry):
+            self.screenshot()
             cu, res, total = self.O_NUMBER.ocr(self.device.image)
-        if cu == 0 and cu + res == total:
-            logger.warning(f'Execute raid failed, no ticket')
-            return False
-        elif cu + res == total and cu < base:
-            logger.warning(f'Execute raid failed, ticket is not enough')
-            return False
-        return True
+
+            # chat/reward 遮挡时，total 可能被识别为 0，先尝试领奖励后再识别一次
+            if total == 0:
+                self.reward_detect_click(True)
+                cu, res, total = self.O_NUMBER.ocr(self.device.image)
+
+            if cu == 0 and cu + res == total:
+                logger.warning(f'Execute raid failed, no ticket (check {i + 1}/{max_retry})')
+                continue
+            elif cu + res == total and cu < base:
+                logger.warning(f'Execute raid failed, ticket is not enough (check {i + 1}/{max_retry})')
+                continue
+
+            return True
+
+        return False
 
     @cached_property
     def order_medal(self) -> ImageGrid:
