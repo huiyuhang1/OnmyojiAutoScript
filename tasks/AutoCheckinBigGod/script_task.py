@@ -9,9 +9,6 @@ import time
 import json
 import random
 
-# 直接运行本脚本时，需要先将项目根目录加入 Python 路径
-if __name__ == '__main__' and 'tasks' not in sys.modules:
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 import requests
 import urllib3
@@ -118,12 +115,6 @@ class ScriptTask(BaseTask):
             self.gl_version = token_data['GL_VERSION']
             logger.info(f'APP版本: {self.gl_version}')
         logger.info(f'Token获取成功! 用户ID: {self.gl_uid[:16]}...')
-
-        # Token已获取，将大神APP切到后台，减少对用户的干扰
-        try:
-            self._adb_shell(['input', 'keyevent', 'KEYCODE_HOME'])
-        except Exception:
-            pass
 
         # 通过API获取角色信息
         logger.info('通过API获取角色信息...')
@@ -1113,3 +1104,13 @@ Java.perform(function() {
             logger.error(f'  领取异常: {title} - {e}')
 
         return False
+
+
+if __name__ == '__main__' :
+    from module.config.config import Config
+    from module.device.device import Device
+
+    c = Config('oas1')
+    d = Device(c)
+    t = ScriptTask(c, d)
+    t.run()
