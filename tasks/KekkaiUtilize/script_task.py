@@ -571,8 +571,8 @@ class ScriptTask(GameUi, ReplaceShikigami, KekkaiUtilizeAssets):
         """
         # ============== 配置常量 ==============#
         RESOURCE_CONFIG = {
-            '斗鱼': {'max': 151, 'record_attr': 'ap_max_num'},
-            '太鼓': {'max': 76, 'record_attr': 'jade_max_num'}
+            '斗鱼': {'max': self.config.kekkai_utilize.utilize_config.best_value, 'record_attr': 'ap_max_num'},
+            '太鼓': {'max': self.config.kekkai_utilize.utilize_config.best_value, 'record_attr': 'jade_max_num'}
         }
         MAX_SWIPES = 20  # 最大滑动次数
         CONSEC_MISS = 3  # 允许连续无卡次数
