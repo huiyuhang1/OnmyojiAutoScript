@@ -421,7 +421,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
             self.screenshot()
             cu, res, total = target_plate.ocr(self.device.image)
             if cu == 0 and cu + res == total:
-                logger.warning(f'No plate number, exit')
+                logger.warning(f'No plate number, exit {cu} {res} {total}')
                 return False
             return True
 
@@ -429,7 +429,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
             self.screenshot()
             cu, res, total = self.O_B_BALL_NUMBER.ocr(self.device.image)
             if cu == 0 and cu + res == total and total == 99:
-                logger.warning(f'No ball number, exit')
+                logger.warning(f'No ball number, exit {cu} {res} {total}')
                 return False
             return True
 
