@@ -213,6 +213,27 @@ class ScriptTask(KU, KekkaiActivationAssets):
             raise GameStuckError
         return delta
 
+    @staticmethod
+    def _ocr_box_center_y(box) -> float:
+        ys = [float(p[1]) for p in box]
+        return sum(ys) / len(ys)
+
+    def _card_ocr_merged_text(self, all_results, anchor) -> str:
+        """同一行卡片上「式神经验」与「勾玉/体力」可能被拆成多个框，合并后再判断。"""
+        cy = self._ocr_box_center_y(anchor.box)
+        parts = []
+        for r in all_results:
+            ry = self._ocr_box_center_y(r.box)
+            if cy - 150 <= ry <= cy + 50:
+                parts.append(r.ocr_text)
+        return ' '.join(parts)
+
+    def _should_skip_shikigami_exp_2800(self, merged_text: str) -> bool:
+        if '式神经验' not in merged_text:
+            return False
+        # 只匹配经验行里的 2800，避免与其它数字混淆
+        return bool(re.search(r'式神经验[^\d]{0,40}\+?\s*2800(?!\d)', merged_text))
+
     def screening_card(self, rule: str):
         """
         开始挑选卡
@@ -269,12 +290,14 @@ class ScriptTask(KU, KekkaiActivationAssets):
                         continue
 
     def check_card_num(self):
-        rule = self.config.kekkai_activation.activation_config.card_type
+        ac = self.config.kekkai_activation.activation_config
+        rule = ac.card_type
+        skip_exp_2800 = ac.skip_shikigami_exp_2800
         if rule == CardType.TAIKO:
-            min_card_num = self.config.kekkai_activation.activation_config.min_taiko_num
+            min_card_num = ac.min_taiko_num
             check_card = "勾玉"
         elif rule == CardType.FISH:
-            min_card_num = self.config.kekkai_activation.activation_config.min_fish_num
+            min_card_num = ac.min_fish_num
             check_card = "体力"
         else:
             logger.error('Unknown utilize rule')
@@ -292,6 +315,11 @@ class ScriptTask(KU, KekkaiActivationAssets):
             # 第二步：提取数字并按数字排序
             numeric_results = []
             for result in filtered_results:
+                if skip_exp_2800:
+                    merged = self._card_ocr_merged_text(results, result)
+                    if self._should_skip_shikigami_exp_2800(merged):
+                        logger.info(f'跳过式神经验+2800/h 的卡（合并文本: {merged!r}）')
+                        continue
                 # 使用正则表达式提取所有数字
                 numbers = [int(num) for num in re.findall(r'\d+', result.ocr_text)]
                 if numbers:  # 如果提取到数字

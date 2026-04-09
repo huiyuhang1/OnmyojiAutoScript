@@ -23,6 +23,10 @@ class ActivationConfig(BaseModel):
     card_type: CardType = Field(default=CardType.TAIKO, description='card_rule_help')
     min_taiko_num: int = Field(default=8, description='挂卡太鼓每小时最少收益,低于则不挂卡')
     min_fish_num: int = Field(default=16, description='挂卡斗鱼每小时最少收益,低于则不挂卡')
+    skip_shikigami_exp_2800: bool = Field(
+        default=False,
+        description='开启后不选择六星结界卡（太鼓/斗鱼列表均适用）',
+    )
     exchange_auto: bool = Field(default=True, description='是否使用智能放入')
     shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     card_not_found_count: int = Field(default=0, description='未发现卡次数')

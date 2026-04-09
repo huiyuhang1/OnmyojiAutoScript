@@ -294,7 +294,8 @@
       "exchange_max": true,
       "exchange_auto": true,
       "exchange_smart": false,
-      "shikigami_class": "N"
+      "shikigami_class": "N",
+      "skip_shikigami_exp_2800": false
     }
   },
   "demon_encounter": {
