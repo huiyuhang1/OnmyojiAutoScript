@@ -105,6 +105,48 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
             case _:
                 logger.error(f'Unknown user status: {cong.bondling_config.user_status}')
 
+    def _switch_soul_for_ball(self, ball_index: int) -> None:
+        """
+        打对应球的结界战斗前切换御魂。需 bondling_switch_soul.auto_switch_soul 为 True，
+        且该球对应配置为「分组,队伍」（与 switch_soul_config.switch_group_team 相同），-1,-1 表示不切换。
+
+        ball_index: 1 镇墓兽 2 火灵 3 茨球 4 小黑
+        """
+        ss = self.config.bondling_fairyland.bondling_switch_soul
+        if not ss.auto_switch_soul:
+            return
+        row = {
+            1: ss.tomb_guard_switch,
+            2: ss.azure_basan_switch,
+            3: ss.snowball_switch,
+            4: ss.little_kuro_switch,
+        }.get(ball_index, '-1,-1')
+        if not row or str(row).strip() in ('-1,-1', ''):
+            return
+        s = str(row).strip()
+        try:
+            g, t = switch_parser(s)
+        except ValueError:
+            logger.error(f'bondling_switch_soul 格式错误 (球{ball_index}): {row!r}，应为 group,team')
+            return
+        if g < 1 or g > 7 or t < 1 or t > 4:
+            logger.warning(f'跳过御魂切换：球{ball_index} 分组/队伍无效 ({g},{t})，有效为组1-7、队1-4')
+            return
+        logger.hr(f'契灵球 {ball_index} 御魂预设: 分组{g} 队伍{t}', 2)
+        self.ui_get_current_page()
+        self.ui_goto(page_shikigami_records)
+        self.run_switch_soul(s)
+        self.ui_get_current_page()
+        self.ui_goto(page_bondling_fairyland)
+        while 1:
+            self.screenshot()
+            if self.appear(self.I_CHECK_BONDLING_FAIRYLAND, interval=1):
+                break
+            if self.appear(self.I_BALL_HELP, interval=1):
+                self.ui_get_current_page()
+                self.ui_goto(page_bondling_fairyland)
+                continue
+
     def run_leader(self):
         """  点击 求援， 组队模式  """
         logger.hr('Start run leader', 2)
@@ -300,6 +342,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
                 continue
 
             if bondling_config.bondling_mode != BondlingMode.MODE1:
+                self._switch_soul_for_ball(current_ball_index)
                 if self.ball_click(current_ball_index):
                     logger.info(f'Current ball number: {current_ball_index} ')
                 else:
