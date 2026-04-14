@@ -2,8 +2,8 @@
   {
     "itemName": "bf_searsh",
     "imageName": "bf_bf_searsh.png",
-    "roiFront": "1133,577,100,100",
-    "roiBack": "1133,577,100,100",
+    "roiFront": "1152,589,81,48",
+    "roiBack": "1145,582,95,71",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "description"
