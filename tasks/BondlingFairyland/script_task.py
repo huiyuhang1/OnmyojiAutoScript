@@ -341,6 +341,10 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
                 self.ui_goto(page_bondling_fairyland)
                 continue
 
+
+            if not self.run_search(bondling_config):
+                continue
+
             if bondling_config.bondling_mode != BondlingMode.MODE1:
                 self._switch_soul_for_ball(current_ball_index)
                 if self.ball_click(current_ball_index):
