@@ -329,6 +329,7 @@ class Script:
         strategy_map = {
             "close_game": self._wait_close_game,
             "goto_main": self._wait_goto_main,
+            "close_computer": self._wait_close_computer,
         }
         func = strategy_map.get(method)
         if not func:
@@ -354,6 +355,11 @@ class Script:
     def _wait_stay_there(self, next_run: datetime) -> bool:
         logger.info("Stay_there (no action) during wait")
         self.device.release_during_wait()
+        return self.wait_until(next_run)
+
+    def _wait_close_computer(self, next_run: datetime) -> bool:
+        logger.info("Close computer during wait")
+        os.system('shutdown /s /t 1') 
         return self.wait_until(next_run)
 
     def exception_handler(self, e: Exception, command: str) -> None:
