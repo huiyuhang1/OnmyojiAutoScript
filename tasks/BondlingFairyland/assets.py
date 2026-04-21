@@ -60,10 +60,9 @@ class BondlingFairylandAssets:
 	# 契灵创建队伍 
 	I_CREATE_TEAM = RuleImage(roi_front=(569,491,141,50), roi_back=(569,491,141,50), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/ball/create_team.png")
 
-
 	# Image Rule Assets
 	# description 
-	I_BF_SEARSH = RuleImage(roi_front=(1133,577,100,100), roi_back=(1133,577,100,100), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_searsh.png")
+	I_BF_SEARSH = RuleImage(roi_front=(1152,589,81,48), roi_back=(1145,582,95,71), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_searsh.png")
 	# description 
 	I_BF_LOCK = RuleImage(roi_front=(826,653,24,26), roi_back=(826,653,24,26), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_lock.png")
 	# description 

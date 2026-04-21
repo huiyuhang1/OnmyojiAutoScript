@@ -334,11 +334,13 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, BondlingBattle, SwitchSoul,
             case _:
                 current_ball_index = 1
 
-        while 1:
 
-            if not self.in_search_ui(screenshot=True):
-                self.ui_get_current_page()
-                self.ui_goto(page_bondling_fairyland)
+        if not self.in_search_ui(screenshot=True):
+            self.ui_get_current_page()
+            self.ui_goto(page_bondling_fairyland)
+
+        while 1:
+            if not self.run_search(bondling_config):
                 continue
 
             if bondling_config.bondling_mode != BondlingMode.MODE1:
