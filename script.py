@@ -332,6 +332,7 @@ class Script:
             "goto_main": self._wait_goto_main,
             "close_emulator_or_goto_main": self._wait_close_emulator_or_goto_main,
             "close_emulator_or_close_game": self._wait_close_emulator_or_close_game,
+            "close_computer": self._wait_close_computer,
         }
         func = strategy_map.get(method)
         if func is None:
@@ -409,6 +410,11 @@ class Script:
     def _wait_close_emulator_or_close_game(self, next_run: datetime) -> bool:
         return self._wait_close_emulator_or(next_run, self._wait_close_game)
 
+    def _wait_close_computer(self, next_run: datetime) -> bool:
+        logger.info("Close computer during wait")
+        os.system(r'C:\Windows\System32\shutdown /s /t 1')
+        return self.wait_until(next_run)
+        
     def _wait_close_emulator_or(self, next_run: datetime, fallback_waiter: Callable[[datetime], bool]) -> bool:
         close_emulator_limit_time = self.config.script.optimization.close_emulator_limit_time
         close_emulator_limit = self._time_to_timedelta(close_emulator_limit_time)

@@ -194,6 +194,7 @@
           "stay_there",
           "goto_main",
           "close_game",
+          "close_computer",
           "close_computer"
         ]
       }

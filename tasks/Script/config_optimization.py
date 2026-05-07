@@ -12,6 +12,7 @@ class WhenTaskQueueEmpty(str, Enum):
     CLOSE_GAME = 'close_game'
     CLOSE_EMULATOR_OR_GOTO_MAIN = 'close_emulator_or_goto_main'
     CLOSE_EMULATOR_OR_CLOSE_GAME = 'close_emulator_or_close_game'
+    CLOSE_COMPUTER = 'close_computer'
 
 class ScheduleRule(str, Enum):
     FILTER = 'Filter'  # 默认的基于过滤器，（按照开发者设定的调度规则进行调度）
