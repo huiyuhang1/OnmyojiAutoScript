@@ -10,8 +10,6 @@ from tasks.Component.config_base import Time
 class WhenTaskQueueEmpty(str, Enum):
     GOTO_MAIN = 'goto_main'
     CLOSE_GAME = 'close_game'
-    CLOSE_EMULATOR_OR_GOTO_MAIN = 'close_emulator_or_goto_main'
-    CLOSE_EMULATOR_OR_CLOSE_GAME = 'close_emulator_or_close_game'
     CLOSE_COMPUTER = 'close_computer'
 
 class ScheduleRule(str, Enum):
@@ -28,8 +26,11 @@ class Optimization(BaseModel):
                                           description='task_hoarding_duration_help')
     when_task_queue_empty: WhenTaskQueueEmpty = Field(default=WhenTaskQueueEmpty.GOTO_MAIN,
                                                       description='when_task_queue_empty_help')
-    close_game_limit_time: Time = Field(default=Time(minute=10),description='close_game_limit_time_help')
-    close_emulator_limit_time: Time = Field(default=Time(minute=30),description='close_emulator_limit_time_help')
-    emulator_startup_lead_time: Time = Field(default=Time(minute=2),description='emulator_startup_lead_time_help')
+    close_game_wait_duration: Time = Field(default=Time(minute=0),
+                                          description='close_game_wait_duration_help')
+    close_emulator_wait_duration: Time = Field(default=Time(minute=0),
+                                              description='close_emulator_wait_duration_help')
+    emulator_startup_lead_time: Time = Field(default=Time(minute=2),
+                                            description='emulator_startup_lead_time_help')
     schedule_rule: ScheduleRule = Field(default=ScheduleRule.FILTER, description='schedule_rule_help')
 
