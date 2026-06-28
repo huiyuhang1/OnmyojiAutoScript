@@ -28,6 +28,7 @@ class UtilizeScheduler(Scheduler):
 
 class UtilizeConfig(BaseModel):
     utilize_rule: UtilizeRule = Field(default=UtilizeRule.DEFAULT, description='utilize_rule_help')
+    best_value: int = Field(default=67, description='蹭卡太鼓的理想值，超过该值则直接确认蹭卡')
     select_friend_list: SelectFriendList = Field(default=SelectFriendList.SAME_SERVER, description='select_friend_list_help')
     shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     shikigami_order: int = Field(default=4, description='shikigami_order_help')
