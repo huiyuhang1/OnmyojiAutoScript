@@ -440,7 +440,7 @@ class Script:
 
     def _wait_close_computer(self, next_run: datetime) -> bool:
         logger.info("Close computer during wait")
-        os.system('shutdown /s /t 1')
+        os.system('C:/Windows/System32/shutdown.exe -s -t 1')
         return self.wait_until(next_run)
 
     def _wait_stay_there(self, next_run: datetime) -> bool:
