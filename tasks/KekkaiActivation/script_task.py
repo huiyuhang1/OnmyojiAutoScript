@@ -24,6 +24,7 @@ from tasks.KekkaiActivation.config import ActivationConfig
 from tasks.Utils.config_enum import ShikigamiClass
 from tasks.GameUi.page import page_main, page_guild
 from tasks.KekkaiActivation.config import CardType
+from tasks.KekkaiActivation.card_filter import income_value, experience_allowed, card_experience
 
 """ 结界挂卡 """
 class ScriptTask(KU, KekkaiActivationAssets):
@@ -135,6 +136,11 @@ class ScriptTask(KU, KekkaiActivationAssets):
             # 如果已经选中这张卡了， 那就激活这张卡
             if card_status and not card_effect:
                 logger.info('Card is selected but not using')
+                if _config.exclude_six_star and not self.selected_card_allowed():
+                    self.save_image(content='挂卡排除六星：选中卡为六星或经验无法确认，未激活，180分钟后重试',
+                                    push_flag=True, wait_time=0)
+                    self.set_next_run('KekkaiActivation', target=datetime.now() + timedelta(minutes=180))
+                    return False
                 while 1:
                     self.screenshot()
                     if self.appear(self.I_A_INVITE, threshold=0.8):
@@ -151,6 +157,21 @@ class ScriptTask(KU, KekkaiActivationAssets):
             if not card_status and not card_effect:
                 logger.info('Card is not selected also not using')
                 self.screening_card(_config.card_type)
+
+    def selected_card_allowed(self):
+        for _ in range(3):
+            self.screenshot()
+            results = self.O_SELECTED_CARD_EXP.detect_and_ocr(self.device.image)
+            values = [income_value(result.ocr_text, '经验') for result in results
+                      if '经验' in result.ocr_text]
+            if len(values) == 1 and experience_allowed(values[0]):
+                logger.info(f'激活前经验复核通过: {values[0]}')
+                return True
+            if 2800 in values:
+                logger.info('激活前识别到六星卡，禁止激活')
+                return False
+            time.sleep(0.3)
+        return False
 
     def goto_cards(self):
         """
@@ -284,6 +305,15 @@ class ScriptTask(KU, KekkaiActivationAssets):
         while 1:
             self.screenshot()
             results = self.O_CHECK_CARD_NUMBER.detect_and_ocr(self.device.image)
+            if self.config.kekkai_activation.activation_config.exclude_six_star:
+                # Retry incomplete OCR on this page before moving on.
+                for _ in range(2):
+                    candidates = [r for r in results if check_card in r.ocr_text]
+                    if all(card_experience(r, results) is not None for r in candidates):
+                        break
+                    time.sleep(0.3)
+                    self.screenshot()
+                    results = self.O_CHECK_CARD_NUMBER.detect_and_ocr(self.device.image)
             ocr_count += 1
             # 第一步：筛选出包含 "体力或者勾玉" 的结果
             filtered_results = [result for result in results if check_card in result.ocr_text]
@@ -292,12 +322,14 @@ class ScriptTask(KU, KekkaiActivationAssets):
             # 第二步：提取数字并按数字排序
             numeric_results = []
             for result in filtered_results:
-                # 使用正则表达式提取所有数字
-                numbers = [int(num) for num in re.findall(r'\d+', result.ocr_text)]
-                if numbers:  # 如果提取到数字
-                    if numbers[0] < min_card_num:
+                if self.config.kekkai_activation.activation_config.exclude_six_star:
+                    experience = card_experience(result, results)
+                    if not experience_allowed(experience):
+                        logger.info(f'跳过六星或经验不明的卡: {result.ocr_text}, 经验={experience}')
                         continue
-                    numeric_results.append((numbers[0], result))  # 按第一个数字排序
+                value = income_value(result.ocr_text, check_card)
+                if value is not None and value >= min_card_num:
+                    numeric_results.append((value, result))
 
             if numeric_results:
                 # 按数字大到小排序

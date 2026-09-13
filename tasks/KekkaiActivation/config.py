@@ -20,6 +20,7 @@ class ActivationScheduler(Scheduler):
 
 
 class ActivationConfig(BaseModel):
+    exclude_six_star: bool = Field(default=True, description='exclude_six_star_help')
     card_type: CardType = Field(default=CardType.TAIKO, description='card_rule_help')
     min_taiko_num: int = Field(default=8, description='挂卡太鼓每小时最少收益,低于则不挂卡')
     min_fish_num: int = Field(default=16, description='挂卡斗鱼每小时最少收益,低于则不挂卡')

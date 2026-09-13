@@ -20,8 +20,10 @@ class KekkaiActivationAssets:
 	# Ocr Rule Assets
 	# 这张卡一共有多少小时 
 	O_CARD_ALL_TIME = RuleOcr(roi=(926,262,95,31), area=(926,262,95,31), mode="Duration", method="Default", keyword="", name="card_all_time")
-	# 识别结界卡每小时收益 
-	O_CHECK_CARD_NUMBER = RuleOcr(roi=(305,153,107,481), area=(305,153,107,481), mode="Single", method="Default", keyword="", name="check_card_number")
+	# 识别结界卡每小时收益和式神经验
+	O_CHECK_CARD_NUMBER = RuleOcr(roi=(305,153,220,481), area=(305,153,220,481), mode="Single", method="Default", keyword="", name="check_card_number")
+	# 激活前识别右侧选中卡的式神经验
+	O_SELECTED_CARD_EXP = RuleOcr(roi=(550,100,650,400), area=(550,100,650,400), mode="Single", method="Default", keyword="", name="selected_card_exp")
 
 
 	# Swipe Rule Assets
@@ -117,5 +119,3 @@ class KekkaiActivationAssets:
 
 	#auto_put_assets
 	i_AUTO_PUT = RuleImage(roi_front=(1149,509,44,42), roi_back=(1145,504,54,52), threshold=0.8, method="Template matching",file="./tasks/KekkaiActivation/a/a_a_auto_put.png")
-
-

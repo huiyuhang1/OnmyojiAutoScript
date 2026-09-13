@@ -1,4 +1,6 @@
 {
+  "exclude_six_star": "挂卡排除六星卡",
+  "exclude_six_star_help": "默认开启。按式神经验过滤六星卡（2800），保留五星卡（2400）及以下；经验识别不明时跳过。关闭后允许使用六星卡。",
   "boss_limit_time": "单局Boss限制时间",
   "kirin_battle_config": "麒麟战斗配置",
   "netherworld_battle_config": "阴界之门战斗配置",

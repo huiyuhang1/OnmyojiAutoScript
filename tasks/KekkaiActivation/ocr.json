@@ -10,11 +10,20 @@
   },
   {
     "itemName": "check_card_number",
-    "roiFront": "305,153,107,481",
-    "roiBack": "305,153,107,481",
+    "roiFront": "305,153,220,481",
+    "roiBack": "305,153,220,481",
     "mode": "Single",
     "method": "Default",
     "keyword": "",
-    "description": "识别结界卡每小时收益"
+    "description": "识别结界卡每小时收益和式神经验"
+  },
+  {
+    "itemName": "selected_card_exp",
+    "roiFront": "550,100,650,400",
+    "roiBack": "550,100,650,400",
+    "mode": "Single",
+    "method": "Default",
+    "keyword": "",
+    "description": "激活前识别右侧选中卡的式神经验"
   }
 ]
