@@ -401,12 +401,16 @@ class ScriptTask(KU, KekkaiActivationAssets):
         :return:
         """
         self.realm_goto_grown()
-        self.appear_then_click(self.i_AUTO_PUT, interval=2)
+        self.smart_put_shikigami()
 
         # 回到结界界面
+        back_timeout = Timer(15).start()
         while 1:
             self.screenshot()
 
+            if back_timeout.reached():
+                self.save_image(content='智能放入后返回结界超时', wait_time=0, image_type='png')
+                raise GameStuckError('智能放入后返回结界超时')
             if self.appear(self.I_REALM_SHIN) and self.appear_multi_scale(self.I_SHI_GROWN):
                 self.screenshot()
                 if not self.appear(self.I_REALM_SHIN):
@@ -414,6 +418,54 @@ class ScriptTask(KU, KekkaiActivationAssets):
                 break
             if self.appear_then_click(self.I_UI_BACK_BLUE, interval=2.5):
                 continue
+
+    def smart_put_shikigami(self) -> bool:
+        """Wait for the growth page, retry the button, then verify the growth slots."""
+        deadline = time.monotonic() + 15
+        stable_frames = 0
+        completed_frames = 0
+        clicks = 0
+        last_click = None
+        empty_slots = [self.I_DETECT_EMPTY_1, self.I_DETECT_EMPTY_2,
+                       self.I_DETECT_EMPTY_3, self.I_DETECT_EMPTY_4,
+                       self.I_DETECT_EMPTY_5, self.I_DETECT_EMPTY_6]
+        while time.monotonic() < deadline:
+            self.screenshot()
+            # Check without an interval: an interval-gated false is not a missing page.
+            if not self.appear(self.I_RS_RECORDS_SHIKI):
+                stable_frames = completed_frames = 0
+                time.sleep(0.3)
+                continue
+            stable_frames += 1
+            if stable_frames < 2:
+                time.sleep(0.3)
+                continue
+
+            now = time.monotonic()
+            if last_click is not None and now - last_click >= 1:
+                needs_replacement = self.appear(self.I_RS_LEVEL_MAX) or any(
+                    self.appear(slot) for slot in empty_slots)
+                completed_frames = 0 if needs_replacement else completed_frames + 1
+                if completed_frames >= 2:
+                    logger.info('智能放入检查通过：连续两帧未发现空位或满级式神')
+                    return True
+                # Allow one more frame to confirm success before clicking again.
+                if completed_frames:
+                    time.sleep(0.3)
+                    continue
+
+            if clicks < 3 and (last_click is None or now - last_click >= 3):
+                if self.appear_then_click_multi_scale(self.I_RS_SMART_EXCHANGE):
+                    clicks += 1
+                    last_click = time.monotonic()
+                    completed_frames = 0
+                    logger.info(f'智能放入：第{clicks}次点击，等待育成结果')
+            time.sleep(0.3)
+
+        reason = '未识别到智能放入按钮或育成界面未稳定' if not clicks else '点击后仍有空位、满级式神或界面无法确认'
+        logger.warning(f'智能放入超时：{reason}，点击次数={clicks}')
+        self.save_image(content=f'智能放入超时：{reason}', wait_time=0, image_type='png', push_flag=False)
+        return False
 
     def harvest_card(self):
         """

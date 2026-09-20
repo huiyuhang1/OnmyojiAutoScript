@@ -80,3 +80,62 @@ def test_preselected_six_star_never_reaches_activate(monkeypatch):
     task.set_next_run = lambda *args, **kwargs: None
     # No click/appear methods: attempting activation would fail this test.
     assert ScriptTask.run_activation(task, task.config.kekkai_activation.activation_config) is False
+
+
+def smart_put_task(monkeypatch, *, button_after=0, success_after=1, stable=True):
+    clock = [0.0]
+    clicks = []
+    screenshots = []
+    failures = []
+    monkeypatch.setattr('tasks.KekkaiActivation.script_task.time.monotonic', lambda: clock[0])
+    monkeypatch.setattr('tasks.KekkaiActivation.script_task.time.sleep',
+                        lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    task = SimpleNamespace()
+    for name in ['I_RS_RECORDS_SHIKI', 'I_RS_SMART_EXCHANGE', 'I_RS_LEVEL_MAX'] + [
+            f'I_DETECT_EMPTY_{n}' for n in range(1, 7)]:
+        setattr(task, name, name)
+
+    def appear(target):
+        if target == 'I_RS_RECORDS_SHIKI':
+            return stable
+        if target in ('I_RS_LEVEL_MAX', 'I_DETECT_EMPTY_1'):
+            return len(clicks) < success_after
+        return False
+
+    def click(target):
+        assert target == 'I_RS_SMART_EXCHANGE'
+        if clock[0] < button_after:
+            return False
+        clicks.append(clock[0])
+        return True
+
+    task.appear = appear
+    task.appear_then_click_multi_scale = click
+    task.screenshot = lambda: screenshots.append(clock[0])
+    task.save_image = lambda **kwargs: failures.append(kwargs)
+    return task, clicks, screenshots, failures
+
+
+def test_smart_put_waits_for_late_button_and_verifies_result(monkeypatch):
+    task, clicks, frames, failures = smart_put_task(monkeypatch, button_after=2)
+    assert ScriptTask.smart_put_shikigami(task) is True
+    assert len(clicks) == 1 and clicks[0] >= 2
+    assert frames[-1] - clicks[0] >= 1.3
+    assert not failures
+
+
+def test_smart_put_retries_when_first_click_does_not_work(monkeypatch):
+    task, clicks, _, failures = smart_put_task(monkeypatch, success_after=2)
+    assert ScriptTask.smart_put_shikigami(task) is True
+    assert len(clicks) == 2 and clicks[1] - clicks[0] >= 3
+    assert not failures
+
+
+@pytest.mark.parametrize('options,expected_clicks', [
+    ({'button_after': 100}, 0), ({'stable': False}, 0), ({'success_after': 100}, 3)])
+def test_smart_put_times_out_and_saves_failure(monkeypatch, options, expected_clicks):
+    task, clicks, frames, failures = smart_put_task(monkeypatch, **options)
+    assert ScriptTask.smart_put_shikigami(task) is False
+    assert len(clicks) == expected_clicks
+    assert len(failures) == 1 and failures[0]['image_type'] == 'png'
+    assert frames[-1] < 15
