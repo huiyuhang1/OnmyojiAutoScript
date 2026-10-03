@@ -9,6 +9,7 @@ from module.atom.long_click import RuleLongClick
 from module.atom.ocr import RuleOcr
 from module.base.timer import Timer
 from module.logger import logger
+from module.exception import GameStuckError
 
 from tasks.base_task import BaseTask
 from tasks.GameUi.assets import GameUiAssets
@@ -26,6 +27,24 @@ def switch_parser(switch_str: str) -> tuple:
 
 
 class SwitchSoul(BaseTask, SwitchSoulAssets):
+
+    O_SCENE_DOWNLOAD_TITLE = RuleOcr(
+        roi=(500, 195, 290, 55), area=(500, 195, 290, 55),
+        mode='Single', method='Default', keyword='', name='scene_download_title')
+    O_SCENE_DOWNLOAD_CANCEL = RuleOcr(
+        roi=(430, 448, 112, 43), area=(430, 448, 112, 43),
+        mode='Single', method='Default', keyword='', name='scene_download_cancel')
+
+    def cancel_scene_download(self) -> bool:
+        title = ''.join(self.O_SCENE_DOWNLOAD_TITLE.ocr(self.device.image).split())
+        if '场景扩展包下载' not in title:
+            return False
+        cancel = ''.join(self.O_SCENE_DOWNLOAD_CANCEL.ocr(self.device.image).split())
+        if '取消' in cancel:
+            self.click(self.O_SCENE_DOWNLOAD_CANCEL, interval=2)
+            logger.info('取消场景扩展包下载弹窗，继续打开御魂预设')
+        # Even if cancel OCR fails, never click controls behind the modal.
+        return True
 
     def goto_shikigami_records(self, button):
         """
@@ -72,8 +91,16 @@ class SwitchSoul(BaseTask, SwitchSoulAssets):
         点击预设
         :return:
         """
+        timeout = Timer(25).start()
+        preset_clicks = 0
         while 1:
             self.screenshot()
+            if timeout.reached():
+                self.save_image(content='打开御魂预设超时', wait_time=0, image_type='png')
+                raise GameStuckError('打开御魂预设超时')
+            if self.cancel_scene_download():
+                sleep(0.3)
+                continue
             if self.appear(self.I_SOU_SWITCH_1):
                 break
             if self.appear(self.I_SOU_SWITCH_2):
@@ -85,7 +112,11 @@ class SwitchSoul(BaseTask, SwitchSoulAssets):
             if self.appear(self.I_SOU_TEAM_PRESENT):
                 break
             if self.appear(self.I_SOUL_PRESET):
-                self.click(self.I_SOUL_PRESET, interval=3)
+                if preset_clicks >= 5:
+                    self.save_image(content='御魂预设多次点击未打开', wait_time=0, image_type='png')
+                    raise GameStuckError('御魂预设多次点击未打开')
+                if self.click(self.I_SOUL_PRESET, interval=3):
+                    preset_clicks += 1
                 continue
         logger.info('Click preset in switch soul')
 
