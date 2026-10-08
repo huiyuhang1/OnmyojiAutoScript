@@ -19,6 +19,7 @@ from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralBattle.battle_wait import BattleWait
 
 from module.logger import logger
+from module.exception import GameStuckError
 
 
 class GeneralBattle(BattleWait, GeneralBuff):
@@ -68,8 +69,12 @@ class GeneralBattle(BattleWait, GeneralBuff):
                 if not getattr(config, 'lock_team_enable', False):  # 没有锁定阵容
                     if self.current_count == 1 and not confed:  # 第一次战斗且是本次第一次配置
                         self.switch_preset_team(config.preset_enable, config.preset_group, config.preset_team)
+                        if self.is_in_real_battle(False):
+                            return True
                         self.check_and_open_buff(buff)
                         confed = True
+                        # 配置耗时不应消耗点击准备的等待时间。
+                        timeout_timer.reset()
                     # 点击准备(锁定阵容自动点准备,不锁定阵容前面也已经配置完毕需要点准备)
                     if self.appear_then_click(self.I_PREPARE_HIGHLIGHT, interval=0.8):
                         continue
@@ -404,9 +409,23 @@ class GeneralBattle(BattleWait, GeneralBuff):
             return None
 
         logger.info("Preset is enable")
+        preset_timer = Timer(30).start()
+
+        def preset_screenshot():
+            self.screenshot()
+            # 准备倒计时结束后已进入战斗，不能继续点击预设区域。
+            if self.is_in_real_battle(False):
+                logger.warning('Battle started before preset selection completed')
+                return False
+            if preset_timer.reached():
+                self.save_image()
+                raise GameStuckError('Preset selection timed out')
+            return True
+
         # 点击预设按钮
         while 1:
-            self.screenshot()
+            if not preset_screenshot():
+                return False
 
             if self.appear(self.I_PRESET_ENSURE):
                 break
@@ -454,7 +473,8 @@ class GeneralBattle(BattleWait, GeneralBuff):
         # 考虑到有些预设组没有预设，所以这里取一个比较固定的颜色
         unselected_color = (224.9, 208.3, 187.4)
         while True:
-            self.screenshot()
+            if not preset_screenshot():
+                return False
             color_tmp = get_color(self.device.image,
                                   (tmp.roi_back[0], tmp.roi_back[1], tmp.roi_back[0] + color_size[0],
                                    tmp.roi_back[1] + color_size[1]))
@@ -474,7 +494,8 @@ class GeneralBattle(BattleWait, GeneralBuff):
         # unselected_color = get_unselect_color(self.C_PRESET_TEAM_1, self.C_PRESET_TEAM_2, self.C_PRESET_TEAM_3, size=color_size )
         unselected_color = (216.8, 185.0, 146.8)
         while True:
-            self.screenshot()
+            if not preset_screenshot():
+                return False
             color_tmp = get_color(self.device.image,
                                   (tmp.roi_back[0], tmp.roi_back[1], tmp.roi_back[0] + color_size[0],
                                    tmp.roi_back[1] + color_size[1]))
@@ -490,15 +511,17 @@ class GeneralBattle(BattleWait, GeneralBuff):
         self.wait_until_appear(self.I_PRESET_ENSURE, wait_time=1)
         click_timer = Timer(10).start()
         while 1:
-            self.screenshot()
-            if click_timer.reached():
-                logger.warning("Switch preset failure")
+            if not preset_screenshot():
+                return False
             if not self.appear(self.I_PRESET_ENSURE):
                 break
+            if click_timer.reached():
+                self.save_image()
+                raise GameStuckError('Preset confirmation timed out')
             if self.appear_then_click(self.I_PRESET_ENSURE, threshold=0.8, interval=1):
                 continue
         logger.info("Click preset ensure")
-        return None
+        return True
 
     def random_click_swipt(self):
         if 0 <= random.randint(0, 500) <= 3:  # 百分之4的概率

@@ -216,44 +216,13 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
             fail_count += 1
 
         logger.info('Boss battle confirm and enter')
-        # 等待挑战, 5秒也是等
-        time.sleep(5)
-        # 延长时间并在战斗结束后改回来
-        self.device.stuck_timer_long = Timer(480, count=480).start()
-        preset_switched = False
-        while True:
-            self.screenshot()
-            if self.appear(self.I_BOSS_DONE_CHECK):
-                break
-            if self.appear(self.I_BOSS_GATHER):
-                self.device.stuck_record_clear()
-                self.device.stuck_record_add('BATTLE_STATUS_S')
-                logger.info('Boss Gathering...')
-                sleep(2)
-                continue
-            if self.appear(self.I_BOSS_WAIT):
-                logger.info('Boss battle failed, waiting for 2 seconds...')
-                sleep(2)
-                continue
-            if self.appear(self.I_PREPARE_HIGHLIGHT):
-                if preset_switched:
-                    self.run_general_battle()
-                    continue
-                preset_switched = True
-                # 逢魔其他战斗会影响current_count导致大于0
-                self.current_count = 0
-                if self.best_demon_enable:
-                    general_battle_config = convert_to_general_battle_config(self.boss_type,
-                                                                             best_demon_battle_conf=self.conf.best_demon_battle_config)
-                else:
-                    general_battle_config = convert_to_general_battle_config(self.boss_type,
-                                                                             demon_battle_conf=self.conf.demon_battle_config)
-                self.run_general_battle(config=general_battle_config)
-                continue
-            logger.info('Unknown scene Or Boss fight failed.waiting for Prepare_Button appear...')
-            self.wait_until_appear(self.I_PREPARE_HIGHLIGHT, wait_time=2)
-
-        self.device.stuck_timer_long = Timer(300, count=300).start()
+        if self.best_demon_enable:
+            battle_config = convert_to_general_battle_config(
+                self.boss_type, best_demon_battle_conf=self.conf.best_demon_battle_config)
+        else:
+            battle_config = convert_to_general_battle_config(
+                self.boss_type, demon_battle_conf=self.conf.demon_battle_config)
+        self._run_boss_battle(battle_config)
 
         # 等待回到挑战boss主界面
         self.wait_until_appear(self.I_BOSS_GATHER)
@@ -266,6 +235,37 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
             if self.appear_then_click(self.I_BOSS_BACK_WHITE, interval=1):
                 continue
         # 返回到封魔主界面
+
+    def _run_boss_battle(self, config: GeneralBattleConfig):
+        # 进场后立即监测准备界面，避免错过自动开战前的预设切换。
+        original_timer = self.device.stuck_timer_long
+        self.device.stuck_timer_long = Timer(480, count=480).start()
+        try:
+            while True:
+                self.screenshot()
+                if self.appear(self.I_BOSS_DONE_CHECK):
+                    return
+                if (self.is_in_real_battle(False)
+                        or any(self.appear(target) for target in
+                               (self.I_DE_WIN, self.I_WIN, self.I_FALSE, self.I_REWARD))):
+                    self.run_general_battle(config=config)
+                    continue
+                if self.appear(self.I_PREPARE_HIGHLIGHT):
+                    # 灯笼战斗和失败重试不能影响本次 Boss 的预设设置。
+                    self.current_count = 0
+                    self.run_general_battle(config=config)
+                    continue
+                if self.appear(self.I_BOSS_GATHER):
+                    self.device.stuck_record_clear()
+                    self.device.stuck_record_add('BATTLE_STATUS_S')
+                    logger.info('Boss Gathering...')
+                    sleep(0.5)
+                    continue
+                if self.appear(self.I_BOSS_WAIT):
+                    logger.info('Boss battle failed, waiting for preparation...')
+                sleep(0.5)
+        finally:
+            self.device.stuck_timer_long = original_timer
 
     def execute_lantern(self):
         """
