@@ -172,7 +172,7 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
         保存配置文件
         :return:
         """
-        self.model.write_json(self.config_name, self.model.dict())
+        self.model.save()
 
     def update_scheduler(self) -> None:
         """

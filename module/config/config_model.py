@@ -8,10 +8,12 @@ import re
 import inflection
 
 from pathlib import Path
+from threading import RLock
 from pydantic import BaseModel, ValidationError, Field
 
 from module.config.utils import *
 from module.logger import logger
+from module.config.config_persistence import save_changes
 
 # 导入配置的Python文件
 from tasks.Component.config_base import ConfigBase, TimeDelta
@@ -162,10 +164,31 @@ class ConfigModel(ConfigBase):
         """
         if not config_name:
             super().__init__()
+            object.__setattr__(self, '_save_lock', RLock())
+            object.__setattr__(self, '_saved_data', self._persistence_data())
             return
         data = self.read_json(config_name)
         data["config_name"] = config_name
         super().__init__(**data)
+        object.__setattr__(self, '_save_lock', RLock())
+        object.__setattr__(self, '_saved_data', self._persistence_data())
+
+    def _persistence_data(self):
+        return json.loads(json.dumps(self.model_dump(), default=str))
+
+    @staticmethod
+    def _refresh_model(target, source, snapshot):
+        # Keep nested model objects alive: running tasks retain references to them.
+        for key in type(source).model_fields:
+            if key not in snapshot:
+                continue
+            value = getattr(source, key)
+            old = getattr(target, key)
+            if isinstance(old, BaseModel) and isinstance(value, BaseModel):
+                ConfigModel._refresh_model(old, value, snapshot[key])
+            elif json.loads(json.dumps(target.model_dump(), default=str))[key] == snapshot[key]:
+                # A GUI edit made during saving must stay dirty for its next save.
+                BaseModel.__setattr__(target, key, value)
 
     def __setattr__(self, key, value):
         """
@@ -241,7 +264,24 @@ class ConfigModel(ConfigBase):
 
         :return:
         """
-        self.write_json(self.config_name, self.model_dump())
+        with self._save_lock:
+            self._save_changes()
+
+    def _save_changes(self):
+        current = self._persistence_data()
+        filepath = Path.cwd() / 'config' / f'{self.config_name}.json'
+        merged = save_changes(filepath, self._saved_data, current)
+        # Adopt edits from other config instances so subsequent saves cannot undo them.
+        for key in type(self).model_fields:
+            if key not in merged or merged[key] == current[key]:
+                continue
+            value = getattr(self, key)
+            if isinstance(value, BaseModel):
+                fresh = type(value).model_validate(merged[key])
+                self._refresh_model(value, fresh, current[key])
+            elif self._persistence_data()[key] == current[key]:
+                BaseModel.__setattr__(self, key, merged[key])
+        object.__setattr__(self, '_saved_data', merged)
 
     @staticmethod
     def type(key: str) -> str:
@@ -470,11 +510,14 @@ class ConfigModel(ConfigBase):
         # logger.info(f"new config: {data}")
 
         # write to json config  file
-        self.write_json(self.config_name, data)
+        filepath = Path.cwd() / 'config' / f'{self.config_name}.json'
+        save_changes(filepath, self._saved_data, json.loads(json.dumps(data, default=str)))
 
         # reload from the newly modified json config file
         data = self.read_json(self.config_name)
         super().__init__(**data)
+        object.__setattr__(self, '_save_lock', RLock())
+        object.__setattr__(self, '_saved_data', self._persistence_data())
 
 
 if __name__ == "__main__":
@@ -485,4 +528,3 @@ if __name__ == "__main__":
         c = ConfigModel()
 
     print(c.script_task('GuildBanquet'))
-
