@@ -237,7 +237,9 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
         # 返回到封魔主界面
 
     def _run_boss_battle(self, config: GeneralBattleConfig):
-        # 进场后立即监测准备界面，避免错过自动开战前的预设切换。
+        # 集结等待界面即可切换预设，不能等到准备倒计时才开始切换。
+        preset_switched = False
+        battle_config = config.model_copy(update={'preset_enable': False})
         original_timer = self.device.stuck_timer_long
         self.device.stuck_timer_long = Timer(480, count=480).start()
         try:
@@ -245,21 +247,25 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                 self.screenshot()
                 if self.appear(self.I_BOSS_DONE_CHECK):
                     return
+                if self.appear(self.I_BOSS_GATHER):
+                    self.device.stuck_record_clear()
+                    self.device.stuck_record_add('BATTLE_STATUS_S')
+                    if config.preset_enable and not preset_switched:
+                        preset_switched = self.switch_preset_team(
+                            True, config.preset_group, config.preset_team) is True
+                        continue
+                    logger.info('Boss Gathering...')
+                    sleep(0.5)
+                    continue
                 if (self.is_in_real_battle(False)
                         or any(self.appear(target) for target in
                                (self.I_DE_WIN, self.I_WIN, self.I_FALSE, self.I_REWARD))):
-                    self.run_general_battle(config=config)
+                    self.run_general_battle(config=battle_config)
                     continue
                 if self.appear(self.I_PREPARE_HIGHLIGHT):
                     # 灯笼战斗和失败重试不能影响本次 Boss 的预设设置。
                     self.current_count = 0
-                    self.run_general_battle(config=config)
-                    continue
-                if self.appear(self.I_BOSS_GATHER):
-                    self.device.stuck_record_clear()
-                    self.device.stuck_record_add('BATTLE_STATUS_S')
-                    logger.info('Boss Gathering...')
-                    sleep(0.5)
+                    self.run_general_battle(config=battle_config)
                     continue
                 if self.appear(self.I_BOSS_WAIT):
                     logger.info('Boss battle failed, waiting for preparation...')
