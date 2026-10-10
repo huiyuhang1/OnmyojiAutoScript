@@ -107,18 +107,18 @@ class GeneralBattle(BattleWait, GeneralBuff):
             self.screenshot()
             if self.appear_then_click(self.I_EXIT, interval=1.5):
                 continue
-            if self.appear(self.I_EXIT_ENSURE):
+            if self.appear(self.I_UI_CONFIRM):
                 break
         logger.info(f"Click {self.I_EXIT.name}")
 
         # 点击返回确认
         while 1:
             self.screenshot()
-            if self.appear_then_click(self.I_EXIT_ENSURE, interval=1.5):
+            if self.appear_then_click(self.I_UI_CONFIRM, interval=1.5):
                 continue
             if self.appear(self.I_FALSE):
                 break
-        logger.info(f"Click {self.I_EXIT_ENSURE.name}")
+        logger.info(f"Click {self.I_UI_CONFIRM.name}")
 
         # 点击失败确认
         self.wait_until_appear(self.I_FALSE)
@@ -149,13 +149,13 @@ class GeneralBattle(BattleWait, GeneralBuff):
             self.screenshot()
             if self.appear_then_click(self.I_EXIT, interval=1.5):
                 continue
-            if self.appear(self.I_EXIT_ENSURE):
+            if self.appear(self.I_UI_CONFIRM):
                 break
 
         # 点击返回确认
         while 1:
             self.screenshot()
-            if self.appear_then_click(self.I_EXIT_ENSURE, interval=1.5):
+            if self.appear_then_click(self.I_UI_CONFIRM, interval=1.5):
                 continue
             if self.appear_then_click(self.I_FALSE, interval=1.5):
                 continue
@@ -725,3 +725,17 @@ if __name__ == '__main__':
     unselected_color = get_unselect_color(self.C_PRESET_TEAM_1, self.C_PRESET_TEAM_2, self.C_PRESET_TEAM_3,
                                           size=color_size
                                           )
+
+
+def run_task_or_default_general_battle(task) -> bool:
+    """
+    超时或异常时接管战斗的兜底函数
+    https://github.com/runhey/OnmyojiAutoScript/issues/1884
+    """
+    try:
+        config = task.config.general_battle_config
+    except AttributeError:
+        # 某些任务(如 DemonEncounter)没有直接的 general_battle_config 字段
+        return False
+    gb = GeneralBattle(config=task.config, device=task.device)
+    return gb.run_general_battle(config=config)
