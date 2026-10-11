@@ -4,6 +4,8 @@
 import time
 
 from module.logger import logger
+from module.base.timer import Timer
+from module.exception import GameStuckError
 
 from tasks.GameUi.page import page_main, page_guild
 from tasks.GameUi.game_ui import GameUi
@@ -32,13 +34,18 @@ class Scales(Buy, MallNavbar):
 
 
     def _scales_buy_confirm(self, start_click, number: int = None):
+        opening_timer = Timer(20).start()
+        opening_attempts = 0
         while 1:
             self.screenshot()
             if self.appear(self.I_BUY_PLUS):
                 break
             if self.appear(self.I_SCA_SELECT_1) and self.appear(self.I_SCA_SELECT_2):
                 return
+            if opening_timer.reached() or opening_attempts >= 5:
+                raise GameStuckError('Scales purchase dialog could not be opened')
             if self.appear_then_click(start_click, interval=1):
+                opening_attempts += 1
                 continue
         # 设置购买的数量
         if number is None:
@@ -46,27 +53,31 @@ class Scales(Buy, MallNavbar):
             time.sleep(0.5)
             self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
         else:
-            # 四次截图数字都一样，就可以退出了
-            number_record = []
+            if number >= 30:
+                self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
+            quantity_timer = Timer(30).start()
             while 1:
                 self.screenshot()
                 current = self.O_BUY_NUMBER.ocr(self.device.image)
-                if current >= number:
+                if current == number:
                     break
-                number_record.append(current)
-                if len(number_record) >= 4:
-                    if number_record[0] == number_record[1] == number_record[2] == number_record[3]:
-                        break
-                    number_record.pop(0)
-
-                if self.appear_then_click(self.I_BUY_ADD, interval=0.6):
+                if quantity_timer.reached():
+                    raise GameStuckError(f'Scales purchase quantity could not be set to {number}')
+                if not isinstance(current, int) or current <= 0:
                     continue
+                button = self.I_BUY_ADD if current < number else self.I_BUY_SUB
+                self.appear_then_click(button, interval=0.6)
 
     def _scales_buy_more(self, start_click, number: int = None):
         # 重写
+        self.screenshot()
+        resource_before = self._scales_resource_amount(start_click)
         self._scales_buy_confirm(start_click, number)
 
         # 购买确认
+        timeout = Timer(30).start()
+        submitted = False
+        shop_frames = 0
         while 1:
             self.screenshot()
             if self.appear(self.I_SCA_SIX_STAR) or self.appear(self.I_SCA_REWARD):
@@ -80,10 +91,46 @@ class Scales(Buy, MallNavbar):
                         continue
                 # 收获购买的东西
                 logger.info('Scales get success')
-                break
+                return True
 
-            if self.click(self.C_BUY_MORE, interval=5):
+            # 奖励动画可能在两次截图间结束。已回到礼盒列表时，核对资源
+            # 是否扣除，不能再点击已经消失的购买弹窗所在位置。
+            if (submitted and not self.appear(self.I_BUY_PLUS)
+                    and (self.appear(start_click)
+                         or (self.appear(self.I_MALL_CONSIGNMENT) and self.appear(self.I_MALL_SCCALES)))):
+                resource_after = self._scales_resource_amount(start_click)
+                if (resource_before is not None and resource_after is not None
+                        and resource_after < resource_before):
+                    shop_frames += 1
+                    if shop_frames >= 2:
+                        logger.info('Scales purchase completed: resource decreased and shop returned')
+                        return True
+                else:
+                    shop_frames = 0
+            else:
+                shop_frames = 0
+            if timeout.reached():
+                self.save_image()
+                raise GameStuckError('Scales purchase result could not be confirmed')
+            if self.appear(self.I_BUY_PLUS) and self.click(self.C_BUY_MORE, interval=5):
+                submitted = True
                 continue
+
+    def _scales_resource_amount(self, start_click):
+        targets = (
+            (self.I_SCA_OROCHI_SCALES, self.O_SCA_RES_OROCHI),
+            (self.I_SCA_DEMON_BUY, self.O_SCA_RES_DEMON),
+            (self.I_SCA_PICTURE_BOOK, self.O_SCA_RES_SEA),
+        )
+        for button, ocr in targets:
+            if start_click != button:
+                continue
+            value = ocr.ocr(self.device.image)
+            if isinstance(value, tuple) and len(value) == 3:
+                current, remaining, total = value
+                return current if current + remaining == total and total > 0 else None
+            return value if isinstance(value, int) and value >= 0 else None
+        return None
 
     def _scales_buy_sea_more(self, start_click, number: int = None):
         self._scales_buy_confirm(start_click, number)
@@ -330,26 +377,15 @@ class Scales(Buy, MallNavbar):
                 logger.warning('Scales sea money can not buy two')
                 return
             buy_number = current_money // 200
-        # 购买# 一次最多可以买10个所以要分开来
+        # 海国御魂现在一次最多兑换30个，按配置数量明确设置每批数量。
         logger.info(f'Scales sea buy {buy_number}')
-        if buy_number >= 10:
-            buy_cycles_number = buy_number // 10
-            buy_res_number = buy_number % 10
-        else:
-            buy_cycles_number = None
-            buy_res_number = buy_number
-        if buy_cycles_number:
-            for i in range(buy_cycles_number):
-                if self.config.rich_man.scales.enable_book_auto:
-                    self._scales_buy_more(self.I_SCA_PICTURE_BOOK)
-                else:
-                    self._scales_buy_sea_more(self.I_SCA_PICTURE_BOOK)
-                time.sleep(0.5)
-        if buy_res_number and buy_res_number >= 2:
+        while buy_number > 0:
+            batch_number = min(buy_number, 30)
             if self.config.rich_man.scales.enable_book_auto:
-                self._scales_buy_more(self.I_SCA_PICTURE_BOOK, buy_res_number)
+                self._scales_buy_more(self.I_SCA_PICTURE_BOOK, batch_number)
             else:
-                self._scales_buy_sea_more(self.I_SCA_PICTURE_BOOK, buy_res_number)
+                self._scales_buy_sea_more(self.I_SCA_PICTURE_BOOK, batch_number)
+            buy_number -= batch_number
             time.sleep(0.5)
 
 
