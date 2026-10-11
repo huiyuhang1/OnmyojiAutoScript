@@ -20,6 +20,7 @@ from tasks.GameUi.matcher import any_of, all_of
 from tasks.GameUi.page_definition import Page
 from tasks.KekkaiUtilize.assets import KekkaiUtilizeAssets
 from tasks.Restart.assets import RestartAssets
+from tasks.RichMan.assets import RichManAssets
 from tasks.RyouToppa.assets import RyouToppaAssets
 from tasks.WeeklyTrifles.assets import WeeklyTriflesAssets
 
@@ -95,7 +96,11 @@ page_daily.add_enter_failure_hooks(
 page_daily.connect(page_main, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_daily->page_main")
 page_main.connect(page_daily, GameUiAssets.I_MAIN_GOTO_DAILY, key="page_main->page_daily")
 
-page_mall = Page(GameUiAssets.I_CHECK_MALL, category="global")
+# 商城屋顶装饰会随界面更新变化；两个底部导航同时出现也可确认商城。
+page_mall = Page(any_of(
+    GameUiAssets.I_CHECK_MALL,
+    all_of(RichManAssets.I_MALL_CONSIGNMENT, RichManAssets.I_MALL_SCCALES),
+), category="global")
 page_mall.add_enter_failure_hooks(conditional_action(condition=GameUiAssets.I_CHECK_MAIN,
                                                      action=RestartAssets.C_LOGIN_SCROLL_CLOSE_AREA))
 page_mall.add_enter_success_hooks(GameUiAssets.I_AD_CLOSE_RED, GlobalGameAssets.I_UI_BACK_RED, GlobalGameAssets.I_UI_CANCEL_SAMLL)
