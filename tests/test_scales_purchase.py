@@ -76,16 +76,79 @@ def test_returned_shop_without_currency_change_does_not_blindly_click(monkeypatc
     assert clicks == [task.C_BUY_MORE]
 
 
-@pytest.mark.parametrize('number,readings,expected', [(30, [30], ['max']), (2, [5, 3, 2], ['sub', 'sub'])])
+@pytest.mark.parametrize('number,readings,expected', [
+    (30, [30, 30], ['max']),
+    (15, [15, 15], ['max']),
+    (2, [5, 5, 4, 4, 3, 3, 2, 2], ['max', 'sub', 'sub', 'sub']),
+    (3, [1, 1, 2, 2, 3, 3], ['max', 'add', 'add']),
+])
 def test_quantity_is_exact(monkeypatch, number, readings, expected):
+    monkeypatch.setattr('tasks.RichMan.mall.scales.time.sleep', lambda _: None)
     clicks = []
+    verified = []
     readings = iter(readings)
+    def click(target, **kwargs):
+        clicks.append(target)
+        return True
     task = SimpleNamespace(
-        screenshot=lambda: None, device=SimpleNamespace(image=None),
+        screenshot=lambda: None, device=SimpleNamespace(image=None, click_record_remove=verified.append),
         I_BUY_PLUS='max', I_BUY_ADD='add', I_BUY_SUB='sub',
         appear=lambda target: target == 'max',
         O_BUY_NUMBER=SimpleNamespace(ocr=lambda _: next(readings)),
-        appear_then_click=lambda target, **kwargs: clicks.append(target),
+        appear_then_click=click,
     )
     Scales._scales_buy_confirm(task, 'sea', number)
     assert clicks == expected
+    assert verified == expected[1:]
+
+
+def test_long_verified_adjustment_keeps_device_click_protection(monkeypatch):
+    from collections import deque
+    from module.device.device import Device
+    monkeypatch.setattr('tasks.RichMan.mall.scales.time.sleep', lambda _: None)
+    device = SimpleNamespace(image=None, click_record=deque(maxlen=15))
+    device.click_record_clear = device.click_record.clear
+    device.click_record_remove = lambda button: Device.click_record_remove(device, button)
+    quantity = [1]
+    clicks = []
+    def click(button, **kwargs):
+        device.click_record.append(button)
+        Device.click_record_check(device)
+        clicks.append(button)
+        quantity[0] = 30 if button == 'max' else quantity[0] - 1
+        return True
+    task = SimpleNamespace(
+        screenshot=lambda: None, device=device, I_BUY_PLUS='max',
+        I_BUY_ADD='add', I_BUY_SUB='sub', appear=lambda _: True,
+        O_BUY_NUMBER=SimpleNamespace(ocr=lambda _: quantity[0]), appear_then_click=click,
+    )
+    Scales._scales_buy_confirm(task, 'sea', 2)
+    assert clicks == ['max'] + ['sub'] * 28
+    assert quantity[0] == 2
+    assert list(device.click_record) == ['max']
+
+
+def test_unresponsive_adjustment_times_out_without_repeated_clicks(monkeypatch):
+    monkeypatch.setattr('tasks.RichMan.mall.scales.time.sleep', lambda _: None)
+    class Deadline:
+        def __init__(self, *args):
+            self.calls = 0
+        def start(self):
+            return self
+        def reached(self):
+            self.calls += 1
+            return self.calls > 8
+    monkeypatch.setattr('tasks.RichMan.mall.scales.Timer', Deadline)
+    clicks, cleared = [], []
+    def click(button, **kwargs):
+        clicks.append(button)
+        return True
+    task = SimpleNamespace(
+        screenshot=lambda: None, device=SimpleNamespace(image=None, click_record_remove=cleared.append),
+        I_BUY_PLUS='max', I_BUY_ADD='add', I_BUY_SUB='sub', appear=lambda _: True,
+        O_BUY_NUMBER=SimpleNamespace(ocr=lambda _: 1), appear_then_click=click,
+    )
+    with pytest.raises(GameStuckError, match='quantity could not be set'):
+        Scales._scales_buy_confirm(task, 'sea', 15)
+    assert clicks == ['max', 'add']
+    assert not cleared

@@ -53,20 +53,41 @@ class Scales(Buy, MallNavbar):
             time.sleep(0.5)
             self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
         else:
-            if number >= 30:
-                self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
-            quantity_timer = Timer(30).start()
+            # 最大数量会同时受剩余额度和资源限制，15个也应直接拉满。
+            self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
+            time.sleep(0.5)
+            quantity_timer = Timer(60).start()
+            last_read = None
+            stable_reads = 0
+            pending_adjustment = None
             while 1:
                 self.screenshot()
                 current = self.O_BUY_NUMBER.ocr(self.device.image)
-                if current == number:
-                    break
                 if quantity_timer.reached():
                     raise GameStuckError(f'Scales purchase quantity could not be set to {number}')
                 if not isinstance(current, int) or current <= 0:
+                    stable_reads = 0
+                    last_read = None
                     continue
+                stable_reads = stable_reads + 1 if current == last_read else 1
+                last_read = current
+                if stable_reads < 2:
+                    continue
+                if pending_adjustment is not None:
+                    previous_button, expected = pending_adjustment
+                    if current != expected:
+                        continue
+                    # 仅在两帧确认数量确实变化后移除该次调整记录。
+                    # 无效点击不清记录、不反复点，交由等待上限处理。
+                    self.device.click_record_remove(previous_button)
+                    pending_adjustment = None
+                if current == number:
+                    break
                 button = self.I_BUY_ADD if current < number else self.I_BUY_SUB
-                self.appear_then_click(button, interval=0.6)
+                if self.appear_then_click(button, interval=0.6):
+                    pending_adjustment = (button, current + (1 if current < number else -1))
+                    stable_reads = 0
+                    last_read = None
 
     def _scales_buy_more(self, start_click, number: int = None):
         # 重写
