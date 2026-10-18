@@ -38,6 +38,9 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     O_BOSS_PRESET_ENTRY = RuleOcr(
         roi=(770, 650, 180, 70), area=(770, 650, 180, 70), mode='Full',
         method='Default', keyword='阵容预设', name='boss_preset_entry')
+    O_BOSS_PRESET_BACK = RuleOcr(
+        roi=(10, 5, 190, 85), area=(10, 5, 190, 85), mode='Full',
+        method='Default', keyword='返回', name='boss_preset_back')
 
     def run(self):
         self.conf = self.config.demon_encounter
@@ -249,8 +252,12 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
             if self.is_in_real_battle(False) or self.appear(self.I_BOSS_DONE_CHECK):
                 logger.warning('Boss battle already started or finished; skip opening preset')
                 return False
-            if self.appear(self.I_PRESET_ENSURE) or self.appear(self.I_PRESENT_LESS_THAN_5):
-                return self.switch_preset_team(True, config.preset_group, config.preset_team)
+            if (self.appear(self.I_PRESET_ENSURE) or self.appear(self.I_PRESENT_LESS_THAN_5)
+                    or (not self.appear(self.I_BOSS_GATHER) and self.ocr_appear(self.O_PRESET_FULL))):
+                # 右下角入口先进入阵容展示页，该页左下角还有一个“预设”入口。
+                if not self.switch_preset_team(True, config.preset_group, config.preset_team):
+                    return False
+                return self._leave_boss_preset()
             if timeout.reached():
                 self.save_image()
                 raise GameStuckError('Boss gathering preset window could not be opened')
@@ -258,6 +265,22 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                 if self.ocr_appear_click(self.O_BOSS_PRESET_ENTRY, interval=1):
                     attempts += 1
                     logger.info(f'Open boss gathering preset window ({attempts}/3)')
+            sleep(0.2)
+
+    def _leave_boss_preset(self):
+        timeout = Timer(15).start()
+        attempts = 0
+        while True:
+            self.screenshot()
+            if (self.is_in_real_battle(False) or self.appear(self.I_BOSS_DONE_CHECK)
+                    or self.appear(self.I_BOSS_GATHER)):
+                return True
+            if timeout.reached():
+                self.save_image()
+                raise GameStuckError('Boss preset selected but gathering page did not return')
+            if attempts < 3 and self.ocr_appear(self.O_PRESET_FULL):
+                if self.ocr_appear_click(self.O_BOSS_PRESET_BACK, interval=1):
+                    attempts += 1
             sleep(0.2)
 
     def _run_boss_battle(self, config: GeneralBattleConfig):

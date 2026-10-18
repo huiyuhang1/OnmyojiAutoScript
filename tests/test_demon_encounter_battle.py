@@ -137,7 +137,7 @@ def boss_preset_task(monkeypatch, scenes):
     monkeypatch.setattr('tasks.DemonEncounter.script_task.Timer', Deadline)
     task = SimpleNamespace()
     for name in ['I_BOSS_DONE_CHECK', 'I_PRESET_ENSURE', 'I_PRESENT_LESS_THAN_5',
-                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY']:
+                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY', 'O_PRESET_FULL', 'O_BOSS_PRESET_BACK']:
         setattr(task, name, name)
     frames, clicks, selections = [], [], []
     def screenshot():
@@ -149,6 +149,7 @@ def boss_preset_task(monkeypatch, scenes):
         'done': task.I_BOSS_DONE_CHECK,
     }.get(task.scene)
     task.is_in_real_battle = lambda _: task.scene == 'battle'
+    task.ocr_appear = lambda target: target == task.O_PRESET_FULL and task.scene == 'preview'
     def click(target, **kwargs):
         assert task.scene == 'gather'
         assert target == task.O_BOSS_PRESET_ENTRY
@@ -156,10 +157,11 @@ def boss_preset_task(monkeypatch, scenes):
         return True
     task.ocr_appear_click = click
     def select(*args):
-        assert task.scene == 'window'
+        assert task.scene in ('window', 'preview')
         selections.append(args)
         return True
     task.switch_preset_team = select
+    task._leave_boss_preset = lambda: True
     task.save_image = lambda: None
     return task, clicks, selections
 
@@ -170,6 +172,55 @@ def test_boss_opens_right_entry_before_selecting_team(monkeypatch):
     assert ScriptTask._switch_boss_preset(task, config) is True
     assert clicks == [task.O_BOSS_PRESET_ENTRY]
     assert selections == [(True, 7, 1)]
+
+
+def test_boss_enters_left_preset_from_formation_preview(monkeypatch):
+    task, clicks, selections = boss_preset_task(monkeypatch, ['gather', 'preview'])
+    config = GeneralBattleConfig(preset_enable=True, preset_group=7, preset_team=1)
+    assert ScriptTask._switch_boss_preset(task, config) is True
+    assert clicks == [task.O_BOSS_PRESET_ENTRY]
+    assert selections == [(True, 7, 1)]
+
+
+def test_boss_returns_from_preview_after_selection(monkeypatch):
+    task, clicks, _ = boss_preset_task(monkeypatch, ['preview', 'gather'])
+    def click(target, **kwargs):
+        assert task.scene == 'preview'
+        assert target == task.O_BOSS_PRESET_BACK
+        clicks.append(target)
+        return True
+    task.ocr_appear_click = click
+    assert ScriptTask._leave_boss_preset(task) is True
+    assert clicks == [task.O_BOSS_PRESET_BACK]
+
+
+def test_shared_preset_opens_preview_button_and_confirms_team(monkeypatch):
+    monkeypatch.setattr('tasks.Component.GeneralBattle.general_battle.time.sleep', lambda _: None)
+    monkeypatch.setattr('tasks.Component.GeneralBattle.general_battle.get_color', lambda *args: (0, 0, 0))
+    task = SimpleNamespace(device=SimpleNamespace(image=None), frame=0, confirmed=False)
+    for name in ['I_PRESET_ENSURE', 'I_PRESENT_LESS_THAN_5', 'I_PRESET',
+                 'I_PRESET_WIT_NUMBER', 'O_PRESET', 'O_PRESET_FULL']:
+        setattr(task, name, name)
+    task.C_PRESET_GROUP_1 = SimpleNamespace(roi_back=(0, 0, 5, 5))
+    task.C_PRESET_GROUP_7 = task.C_PRESET_GROUP_1
+    task.C_PRESET_TEAM_1 = SimpleNamespace(roi_back=(0, 0, 5, 5))
+    task.screenshot = lambda: setattr(task, 'frame', task.frame + 1)
+    task.is_in_real_battle = lambda _: False
+    task.appear = lambda target: target == task.I_PRESET_ENSURE and task.frame >= 2 and not task.confirmed
+    task.ocr_appear = lambda target: target == task.O_PRESET_FULL and task.frame == 1
+    clicks = []
+    def click(target, **kwargs):
+        clicks.append(target)
+        if target == task.I_PRESET_ENSURE:
+            task.confirmed = True
+        return True
+    task.click = click
+    task.appear_then_click = lambda target, **kwargs: task.appear(target) and click(target)
+    task.wait_until_appear = lambda *args, **kwargs: None
+    assert GeneralBattle.switch_preset_team(task, True, 7, 1) is True
+    assert clicks[0] == task.O_PRESET_FULL
+    assert clicks[-1] == task.I_PRESET_ENSURE
+    assert task.C_PRESET_TEAM_1 in clicks
 
 
 @pytest.mark.parametrize('scenes,expected_clicks', [(['battle'], 0), (['gather', 'battle'], 1), (['done'], 0)])
