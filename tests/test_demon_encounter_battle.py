@@ -95,11 +95,11 @@ def test_boss_retries_keep_preset_and_take_over_started_battle(monkeypatch, scen
     config = GeneralBattleConfig(preset_enable=True, preset_group=7, preset_team=1)
     calls = []
     switches = []
-    def switch_preset_team(*args):
+    def switch_boss_preset(selected_config):
         assert task.scene == 'gather'
-        switches.append(args)
+        switches.append((True, selected_config.preset_group, selected_config.preset_team))
         return True
-    task.switch_preset_team = switch_preset_team
+    task._switch_boss_preset = switch_boss_preset
     def run_general_battle(config):
         if task.scene == 'prepare':
             assert task.current_count == 0
@@ -122,3 +122,67 @@ def test_boss_restores_watchdog_on_failure():
     with pytest.raises(GameStuckError):
         ScriptTask._run_boss_battle(task, GeneralBattleConfig())
     assert task.device.stuck_timer_long is original
+
+
+def boss_preset_task(monkeypatch, scenes):
+    monkeypatch.setattr('tasks.DemonEncounter.script_task.sleep', lambda _: None)
+    class Deadline:
+        def __init__(self, *args):
+            self.calls = 0
+        def start(self):
+            return self
+        def reached(self):
+            self.calls += 1
+            return self.calls > 6
+    monkeypatch.setattr('tasks.DemonEncounter.script_task.Timer', Deadline)
+    task = SimpleNamespace()
+    for name in ['I_BOSS_DONE_CHECK', 'I_PRESET_ENSURE', 'I_PRESENT_LESS_THAN_5',
+                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY']:
+        setattr(task, name, name)
+    frames, clicks, selections = [], [], []
+    def screenshot():
+        task.scene = scenes[min(len(frames), len(scenes) - 1)]
+        frames.append(task.scene)
+    task.screenshot = screenshot
+    task.appear = lambda target: target == {
+        'gather': task.I_BOSS_GATHER, 'window': task.I_PRESET_ENSURE,
+        'done': task.I_BOSS_DONE_CHECK,
+    }.get(task.scene)
+    task.is_in_real_battle = lambda _: task.scene == 'battle'
+    def click(target, **kwargs):
+        assert task.scene == 'gather'
+        assert target == task.O_BOSS_PRESET_ENTRY
+        clicks.append(target)
+        return True
+    task.ocr_appear_click = click
+    def select(*args):
+        assert task.scene == 'window'
+        selections.append(args)
+        return True
+    task.switch_preset_team = select
+    task.save_image = lambda: None
+    return task, clicks, selections
+
+
+def test_boss_opens_right_entry_before_selecting_team(monkeypatch):
+    task, clicks, selections = boss_preset_task(monkeypatch, ['gather', 'window'])
+    config = GeneralBattleConfig(preset_enable=True, preset_group=7, preset_team=1)
+    assert ScriptTask._switch_boss_preset(task, config) is True
+    assert clicks == [task.O_BOSS_PRESET_ENTRY]
+    assert selections == [(True, 7, 1)]
+
+
+@pytest.mark.parametrize('scenes,expected_clicks', [(['battle'], 0), (['gather', 'battle'], 1), (['done'], 0)])
+def test_boss_entry_stops_on_battle_or_completion(monkeypatch, scenes, expected_clicks):
+    task, clicks, selections = boss_preset_task(monkeypatch, scenes)
+    assert ScriptTask._switch_boss_preset(task, GeneralBattleConfig()) is False
+    assert len(clicks) == expected_clicks
+    assert not selections
+
+
+def test_boss_entry_has_bounded_retries(monkeypatch):
+    task, clicks, selections = boss_preset_task(monkeypatch, ['gather'])
+    with pytest.raises(GameStuckError, match='preset window could not be opened'):
+        ScriptTask._switch_boss_preset(task, GeneralBattleConfig())
+    assert len(clicks) == 3
+    assert not selections

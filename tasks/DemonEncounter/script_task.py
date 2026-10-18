@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from module.logger import logger
 from module.exception import GameStuckError, TaskEnd
 from module.base.timer import Timer
+from module.atom.ocr import RuleOcr
 
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.DemonEncounter.config import BossType, DemonEncounter, convert_to_general_battle_config
@@ -34,6 +35,9 @@ class LanternClass(Enum):
 
 class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     conf: DemonEncounter = None
+    O_BOSS_PRESET_ENTRY = RuleOcr(
+        roi=(770, 650, 180, 70), area=(770, 650, 180, 70), mode='Full',
+        method='Default', keyword='阵容预设', name='boss_preset_entry')
 
     def run(self):
         self.conf = self.config.demon_encounter
@@ -236,6 +240,26 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                 continue
         # 返回到封魔主界面
 
+    def _switch_boss_preset(self, config: GeneralBattleConfig):
+        # 集结页面的入口在右下角，与战斗准备页面左下角的入口不同。
+        timeout = Timer(15).start()
+        attempts = 0
+        while True:
+            self.screenshot()
+            if self.is_in_real_battle(False) or self.appear(self.I_BOSS_DONE_CHECK):
+                logger.warning('Boss battle already started or finished; skip opening preset')
+                return False
+            if self.appear(self.I_PRESET_ENSURE) or self.appear(self.I_PRESENT_LESS_THAN_5):
+                return self.switch_preset_team(True, config.preset_group, config.preset_team)
+            if timeout.reached():
+                self.save_image()
+                raise GameStuckError('Boss gathering preset window could not be opened')
+            if self.appear(self.I_BOSS_GATHER) and attempts < 3:
+                if self.ocr_appear_click(self.O_BOSS_PRESET_ENTRY, interval=1):
+                    attempts += 1
+                    logger.info(f'Open boss gathering preset window ({attempts}/3)')
+            sleep(0.2)
+
     def _run_boss_battle(self, config: GeneralBattleConfig):
         # 集结等待界面即可切换预设，不能等到准备倒计时才开始切换。
         preset_switched = False
@@ -251,8 +275,7 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                     self.device.stuck_record_clear()
                     self.device.stuck_record_add('BATTLE_STATUS_S')
                     if config.preset_enable and not preset_switched:
-                        preset_switched = self.switch_preset_team(
-                            True, config.preset_group, config.preset_team) is True
+                        preset_switched = self._switch_boss_preset(config) is True
                         continue
                     logger.info('Boss Gathering...')
                     sleep(0.5)
