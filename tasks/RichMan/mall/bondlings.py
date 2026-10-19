@@ -2,7 +2,6 @@
 # @author runhey
 # github https://github.com/runhey
 import time
-from copy import copy
 
 from module.logger import logger
 from module.atom.image import RuleImage
@@ -16,45 +15,6 @@ from tasks.RichMan.config import Bondlings as BondlingsConfig
 
 
 class Bondlings(Buy, MallNavbar):
-
-    def _bondlings_locate_item(self, buy_button, remain_number, check_class):
-        """售罄商品会消失，按名称寻找当前列，不能把旧列当成商品身份。"""
-        columns = (self.I_BL_BUY_SOULS, self.I_BL_BUY_STONE,
-                   self.I_BL_BUY_HIGH, self.I_BL_BUY_MEDIUM)
-        for column in columns:
-            x, y, width, height = column.roi_front
-            center = x + width // 2
-            roi = (max(0, center - 115), 330, 230, max(1, y - 330))
-            title_ocr = RuleOcr(roi=roi, area=roi, mode='Full', method='Default',
-                                keyword='', name='bondlings_item_name')
-            title = ''.join(item.ocr_text for item in title_ocr.detect_and_ocr(self.device.image)
-                            if item.score >= title_ocr.score)
-            if not self._bondlings_item_matches(title, check_class):
-                continue
-            offset = center - (buy_button.roi_front[0] + buy_button.roi_front[2] // 2)
-            target = copy(buy_button)
-            target.roi_front = [buy_button.roi_front[0] + offset, *buy_button.roi_front[1:]]
-            target.roi_back = (buy_button.roi_back[0] + offset, *buy_button.roi_back[1:])
-            counter = copy(remain_number)
-            counter.roi = (remain_number.roi[0] + offset, *remain_number.roi[1:])
-            counter.area = (remain_number.area[0] + offset, *remain_number.area[1:])
-            logger.info(f'Bondlings item verified: {title}, column center={center}')
-            return target, counter
-        logger.warning(f'Bondlings item {buy_button.name} not found or name unreadable; skip purchase')
-        return None
-
-    @staticmethod
-    def _bondlings_item_matches(title, check_class):
-        text = ''.join(str(title).split())
-        if check_class == 1:
-            return '御魂' in text and '鸣契石' not in text
-        if check_class == 2:
-            return '鸣契石' in text and '御魂' not in text
-        if check_class == 3:
-            return '高级' in text and '盘' in text
-        if check_class == 4:
-            return '中级' in text and '盘' in text
-        return False
 
     def execute_bondlings(self, con: BondlingsConfig = None):
         if not con:
@@ -94,11 +54,6 @@ class Bondlings(Buy, MallNavbar):
             logger.info('Buy number is 0')
             return
         self.screenshot()
-        located = self._bondlings_locate_item(buy_button, remain_number, check_class)
-        if located is None:
-            return
-        original_button, original_counter = buy_button, remain_number
-        buy_button, remain_number = located
 
         # if buy_button.name == 'BONDLINGS_BL_BUY_SOULS':
         #     if self.appear(self.I_ME_SOULS_NEW):
@@ -135,17 +90,19 @@ class Bondlings(Buy, MallNavbar):
             buy_number = cu // buy_money
         # 购买
         logger.info(f'Buy number is {buy_number}')
-        while buy_number > 0:
-            # 每批兑换前重新查找，上一批售罄后其他商品可能已经左移。
-            self.screenshot()
-            located = self._bondlings_locate_item(original_button, original_counter, check_class)
-            if located is None:
-                return
-            buy_button, _ = located
-            batch_number = min(buy_number, buy_max)
-            if not self.buy_more(buy_button, batch_number):
-                return
-            buy_number -= batch_number
+        if buy_number >= buy_max:
+            buy_cycles_number = buy_number // buy_max
+            buy_res_number = buy_number % buy_max
+        else:
+            buy_cycles_number = None
+            buy_res_number = buy_number
+
+        if buy_cycles_number:
+            for i in range(buy_cycles_number):
+                self.buy_more(buy_button)
+                time.sleep(0.5)
+        if buy_res_number:
+            self.buy_more(buy_button, buy_res_number)
             time.sleep(0.5)
 
 
