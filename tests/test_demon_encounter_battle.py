@@ -137,7 +137,7 @@ def boss_preset_task(monkeypatch, scenes):
     monkeypatch.setattr('tasks.DemonEncounter.script_task.Timer', Deadline)
     task = SimpleNamespace()
     for name in ['I_BOSS_DONE_CHECK', 'I_PRESET_ENSURE', 'I_PRESENT_LESS_THAN_5',
-                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY', 'O_PRESET_FULL', 'O_BOSS_PRESET_BACK']:
+                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY', 'O_PRESET_FULL', 'I_UI_BACK_BLUE']:
         setattr(task, name, name)
     frames, clicks, selections = [], [], []
     def screenshot():
@@ -156,6 +156,7 @@ def boss_preset_task(monkeypatch, scenes):
         clicks.append(target)
         return True
     task.ocr_appear_click = click
+    task.appear_then_click = lambda *args, **kwargs: False
     def select(*args):
         assert task.scene in ('window', 'preview')
         selections.append(args)
@@ -186,12 +187,32 @@ def test_boss_returns_from_preview_after_selection(monkeypatch):
     task, clicks, _ = boss_preset_task(monkeypatch, ['preview', 'gather'])
     def click(target, **kwargs):
         assert task.scene == 'preview'
-        assert target == task.O_BOSS_PRESET_BACK
+        assert target == task.I_UI_BACK_BLUE
         clicks.append(target)
         return True
-    task.ocr_appear_click = click
+    task.appear_then_click = click
     assert ScriptTask._leave_boss_preset(task) is True
-    assert clicks == [task.O_BOSS_PRESET_BACK]
+    assert clicks == [task.I_UI_BACK_BLUE]
+
+
+def test_boss_return_is_bounded_when_arrow_does_not_work(monkeypatch):
+    task, clicks, _ = boss_preset_task(monkeypatch, ['preview'])
+    def click(target, **kwargs):
+        assert target == task.I_UI_BACK_BLUE
+        clicks.append(target)
+        return True
+    task.appear_then_click = click
+    with pytest.raises(GameStuckError, match='gathering page did not return'):
+        ScriptTask._leave_boss_preset(task)
+    assert clicks == [task.I_UI_BACK_BLUE] * 3
+
+
+@pytest.mark.parametrize('scene', ['battle', 'done', 'gather'])
+def test_boss_return_does_not_click_after_leaving_preview(monkeypatch, scene):
+    task, clicks, _ = boss_preset_task(monkeypatch, [scene])
+    task.appear_then_click = lambda *args, **kwargs: pytest.fail('Must not click after preview is gone')
+    assert ScriptTask._leave_boss_preset(task) is True
+    assert not clicks
 
 
 def test_shared_preset_opens_preview_button_and_confirms_team(monkeypatch):

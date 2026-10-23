@@ -38,9 +38,6 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     O_BOSS_PRESET_ENTRY = RuleOcr(
         roi=(770, 650, 180, 70), area=(770, 650, 180, 70), mode='Full',
         method='Default', keyword='阵容预设', name='boss_preset_entry')
-    O_BOSS_PRESET_BACK = RuleOcr(
-        roi=(10, 5, 190, 85), area=(10, 5, 190, 85), mode='Full',
-        method='Default', keyword='返回', name='boss_preset_back')
 
     def run(self):
         self.conf = self.config.demon_encounter
@@ -279,7 +276,8 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                 self.save_image()
                 raise GameStuckError('Boss preset selected but gathering page did not return')
             if attempts < 3 and self.ocr_appear(self.O_PRESET_FULL):
-                if self.ocr_appear_click(self.O_BOSS_PRESET_BACK, interval=1):
+                # “返回”文字不是点击热区，点击左侧蓝色箭头本体。
+                if self.appear_then_click(self.I_UI_BACK_BLUE, interval=1):
                     attempts += 1
             sleep(0.2)
 
