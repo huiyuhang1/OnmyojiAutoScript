@@ -38,6 +38,9 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     O_BOSS_PRESET_ENTRY = RuleOcr(
         roi=(770, 650, 180, 70), area=(770, 650, 180, 70), mode='Full',
         method='Default', keyword='阵容预设', name='boss_preset_entry')
+    O_BOSS_PRESET_AUTO_RETURN = RuleOcr(
+        roi=(480, 95, 320, 55), area=(480, 95, 320, 55), mode='Full',
+        method='Default', keyword='自动返回战场', name='boss_preset_auto_return')
 
     def run(self):
         self.conf = self.config.demon_encounter
@@ -267,18 +270,31 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     def _leave_boss_preset(self):
         timeout = Timer(15).start()
         attempts = 0
+        auto_return = False
         while True:
             self.screenshot()
             if (self.is_in_real_battle(False) or self.appear(self.I_BOSS_DONE_CHECK)
-                    or self.appear(self.I_BOSS_GATHER)):
+                    or any(self.appear(target) for target in
+                           (self.I_BOSS_GATHER, self.I_PREPARE_HIGHLIGHT,
+                            self.I_DE_WIN, self.I_WIN, self.I_FALSE, self.I_REWARD))):
                 return True
+            if not auto_return and self.ocr_appear(self.O_BOSS_PRESET_AUTO_RETURN):
+                # 游戏有独立的自动返回倒计时，不能仍按普通弹窗的 15 秒超时。
+                # 只延长一次，倒计时卡住时仍能报错，避免无限等待。
+                auto_return = True
+                timeout = Timer(90).start()
+                self.device.stuck_record_add('BATTLE_STATUS_S')
+                logger.info('Boss preset: allow countdown to return to battlefield')
             if timeout.reached():
                 self.save_image()
                 raise GameStuckError('Boss preset selected but gathering page did not return')
-            if attempts < 3 and self.ocr_appear(self.O_PRESET_FULL):
+            if attempts < 3 and (auto_return or self.ocr_appear(self.O_PRESET_FULL)):
                 # “返回”文字不是点击热区，点击左侧蓝色箭头本体。
                 if self.appear_then_click(self.I_UI_BACK_BLUE, interval=1):
                     attempts += 1
+                    if auto_return:
+                        # 点击会清空等待标记，恢复它以免 60 秒看门狗提前打断。
+                        self.device.stuck_record_add('BATTLE_STATUS_S')
             sleep(0.2)
 
     def _run_boss_battle(self, config: GeneralBattleConfig):

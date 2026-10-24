@@ -137,7 +137,9 @@ def boss_preset_task(monkeypatch, scenes):
     monkeypatch.setattr('tasks.DemonEncounter.script_task.Timer', Deadline)
     task = SimpleNamespace()
     for name in ['I_BOSS_DONE_CHECK', 'I_PRESET_ENSURE', 'I_PRESENT_LESS_THAN_5',
-                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY', 'O_PRESET_FULL', 'I_UI_BACK_BLUE']:
+                 'I_BOSS_GATHER', 'O_BOSS_PRESET_ENTRY', 'O_PRESET_FULL', 'I_UI_BACK_BLUE',
+                 'O_BOSS_PRESET_AUTO_RETURN', 'I_PREPARE_HIGHLIGHT',
+                 'I_DE_WIN', 'I_WIN', 'I_FALSE', 'I_REWARD']:
         setattr(task, name, name)
     frames, clicks, selections = [], [], []
     def screenshot():
@@ -147,6 +149,7 @@ def boss_preset_task(monkeypatch, scenes):
     task.appear = lambda target: target == {
         'gather': task.I_BOSS_GATHER, 'window': task.I_PRESET_ENSURE,
         'done': task.I_BOSS_DONE_CHECK,
+        'prepare': task.I_PREPARE_HIGHLIGHT, 'reward': task.I_REWARD,
     }.get(task.scene)
     task.is_in_real_battle = lambda _: task.scene == 'battle'
     task.ocr_appear = lambda target: target == task.O_PRESET_FULL and task.scene == 'preview'
@@ -207,7 +210,45 @@ def test_boss_return_is_bounded_when_arrow_does_not_work(monkeypatch):
     assert clicks == [task.I_UI_BACK_BLUE] * 3
 
 
-@pytest.mark.parametrize('scene', ['battle', 'done', 'gather'])
+@pytest.mark.parametrize('return_after', [45, None])
+def test_boss_waits_for_auto_return_without_extending_deadline_forever(monkeypatch, return_after):
+    task, clicks, _ = boss_preset_task(monkeypatch, ['preview'])
+    elapsed = [0]
+    class Deadline:
+        def __init__(self, limit):
+            self.limit = limit
+        def start(self):
+            self.started = elapsed[0]
+            return self
+        def reached(self):
+            return elapsed[0] - self.started >= self.limit
+    monkeypatch.setattr('tasks.DemonEncounter.script_task.Timer', Deadline)
+    markers = set()
+    task.device = SimpleNamespace(stuck_record_add=markers.add)
+    def screenshot():
+        elapsed[0] += 5
+        if elapsed[0] > 60:
+            assert 'BATTLE_STATUS_S' in markers
+        task.scene = 'battle' if return_after and elapsed[0] >= return_after else 'preview'
+    task.screenshot = screenshot
+    # 即使左下角“预设”识别失败，也可凭自动返回提示识别阵容展示页。
+    task.ocr_appear = lambda target: target == task.O_BOSS_PRESET_AUTO_RETURN
+    def click(target, **kwargs):
+        markers.clear()  # 实际点击会清空设备等待标记。
+        clicks.append(target)
+        return True
+    task.appear_then_click = click
+    if return_after:
+        assert ScriptTask._leave_boss_preset(task) is True
+        assert elapsed[0] == return_after
+    else:
+        with pytest.raises(GameStuckError, match='gathering page did not return'):
+            ScriptTask._leave_boss_preset(task)
+        assert elapsed[0] == 95
+    assert clicks == [task.I_UI_BACK_BLUE] * 3
+
+
+@pytest.mark.parametrize('scene', ['battle', 'done', 'gather', 'prepare', 'reward'])
 def test_boss_return_does_not_click_after_leaving_preview(monkeypatch, scene):
     task, clicks, _ = boss_preset_task(monkeypatch, [scene])
     task.appear_then_click = lambda *args, **kwargs: pytest.fail('Must not click after preview is gone')
