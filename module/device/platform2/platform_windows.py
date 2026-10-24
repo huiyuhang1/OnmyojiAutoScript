@@ -182,6 +182,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
             if re.search(r'MuMuPlayer(?:Global)?-15\.0-\d+', instance.name):
                 self.execute(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} --version 15 launch', show_window=show_window)
+            elif exe.replace('\\', '/').lower().endswith('/mumunxmain.exe'):
+                # MuMu 5 的主程序可能已作为多开器运行，必须通过管理接口启动实例。
+                self.execute(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} launch', show_window=show_window)
             else:
                 self.execute(f'"{exe}" -v {instance.MuMuPlayer12_id}', show_window=show_window)
         elif instance == Emulator.LDPlayerFamily:
@@ -242,6 +245,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             if re.search(r'MuMuPlayer(?:Global)?-15\.0-\d+', instance.name):
                 # Finish shutdown before emulator_start() launches the same instance.
                 self.execute(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} --version 15 shutdown').wait(timeout=30)
+            elif exe.replace('\\', '/').lower().endswith('/mumunxmain.exe'):
+                # 新版不再提供 api shutdown_player；等待命令完成再启动同一实例。
+                self.execute(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} shutdown').wait(timeout=30)
             else:
                 self.execute(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
         elif instance == Emulator.LDPlayerFamily:
