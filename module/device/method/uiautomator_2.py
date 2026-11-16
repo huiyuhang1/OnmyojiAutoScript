@@ -115,14 +115,19 @@ class ShellBackgroundResponse:
 class Uiautomator2(Connection):
     @retry
     def screenshot_uiautomator2(self):
+        if getattr(self, '_u2_screenshot_use_adb', False):
+            return self.screenshot_adb()
         image = self.u2.screenshot(format='raw')
         image = np.frombuffer(image, np.uint8)
         if image is None:
             raise ImageTruncated('Empty image after reading from buffer')
 
-        image = cv2.imdecode(image, cv2.IMREAD_COLOR)
+        image = cv2.imdecode(image, cv2.IMREAD_COLOR) if image.size else None
         if image is None:
-            raise ImageTruncated('Empty image after cv2.imdecode')
+            logger.warning('Uiautomator2 returned an invalid screenshot; trying ADB screencap')
+            fallback = self.screenshot_adb()
+            self._u2_screenshot_use_adb = True
+            return fallback
 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if image is None:
