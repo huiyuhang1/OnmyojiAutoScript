@@ -584,14 +584,13 @@ class Script:
             logger.warning(e)
             self.exception_handler(e=e, command=command)
             self.config.task_call('Restart')
-            return True
+            return False
         except (GameStuckError, GameTooManyClickError) as e:
             logger.error(e)
             self.save_error_log()
             self.exception_handler(e=e, command=command)
             logger.warning(f'Game stuck, {self.device.package} will be restarted in 10 seconds')
             logger.warning('If you are playing by hand, please stop Alas')
-            self.config.notifier.push(title=f'{I18n.trans_zh_cn(command)}{command}', content=f"<{self.config_name}> GameStuckError or GameTooManyClickError")
             self.config.task_call('Restart')
             self.device.sleep(10)
             return False
@@ -610,7 +609,6 @@ class Script:
             logger.critical('Game page unknown')
             self.save_error_log()
             self.exception_handler(e=e, command=command)
-            self.config.notifier.push(title=f'{I18n.trans_zh_cn(command)}{command}', content=f"<{self.config_name}> GamePageUnknownError")
             self.config.task_call('Restart')
             self.device.sleep(10)
             return False
@@ -618,20 +616,45 @@ class Script:
             logger.critical(e)
             self.exception_handler(e=e, command=command)
             logger.critical('This is likely to be a mistake of developers, but sometimes just random issues')
-            self.config.notifier.push(title=f'{I18n.trans_zh_cn(command)}{command}', content=f"<{self.config_name}> ScriptError")
-            exit(1)
+            self.config.task_call('Restart')
+            self.device.sleep(10)
+            return False
         except RequestHumanTakeover as e:
             logger.critical(e)
             self.exception_handler(e=e, command=command)
             logger.critical('Request human takeover')
-            self.config.notifier.push(title=f'{I18n.trans_zh_cn(command)}{command}', content=f"<{self.config_name}> RequestHumanTakeover")
-            exit(1)
+            self.config.task_call('Restart')
+            self.device.sleep(10)
+            return False
         except Exception as e:
             logger.exception(e)
             self.exception_handler(e=e, command=command)
             self.save_error_log()
-            self.config.notifier.push(title=f'{I18n.trans_zh_cn(command)}{command}', content=f"<{self.config_name}> Exception occured")
-            exit(1)
+            self.config.task_call('Restart')
+            self.device.sleep(10)
+            return False
+
+    def _handle_task_failure(self, task, success):
+        failed = 0 if success else self.failure_record.get(task, 0) + 1
+        self.failure_record[task] = failed
+        if failed < 3:
+            return False
+        target = datetime.now().replace(microsecond=0) + timedelta(days=1)
+        config = self.config
+        with config.lock_config:
+            config.reload()
+            scheduler = getattr(config.model, convert_to_underscore(task)).scheduler
+            scheduler.next_run = target
+            config.save()
+        self.failure_record[task] = 0
+        logger.error(f'Task {task} failed three times; deferred until {target}')
+        try:
+            config.notifier.push(
+                title=f'{I18n.trans_zh_cn(task)}{task}',
+                content=f'<{self.config_name}> 任务连续失败三次，已推迟至 {target}，继续执行其他任务')
+        except Exception:
+            logger.exception('Failed to send task failure notification')
+        return True
 
     def loop(self):
         """
@@ -718,39 +741,12 @@ class Script:
             self.is_first_task = False
             self.anti_ban_guard.record_active((datetime.now() - _task_start).total_seconds())
 
-            # Check failures
-            # failed = deep_get(self.failure_record, keys=task, default=0)
-            failed = self.failure_record[task] if task in self.failure_record else 0
-            failed = 0 if success else failed + 1
-            # deep_set(self.failure_record, keys=task, value=failed)
-            self.failure_record[task] = failed
-            if failed >= 3:
-                logger.critical(f"Task `{task}` failed 3 or more times.")
-                logger.critical("Possible reason #1: You haven't used it correctly. "
-                                "Please read the help text of the options.")
-                logger.critical("Possible reason #2: There is a problem with this task. "
-                                "Please contact developers or try to fix it yourself.")
-                logger.critical('Request human takeover')
-                # 添加失败三次的推送通知
-                self.config.notifier.push(
-                    title=f'{I18n.trans_zh_cn(task)}{task}',
-                    content=f"<{self.config_name}> 任务连续失败三次，请上线查看"
-                )
-                # 关闭模拟器
-                if self.config.script.error.error_repeated:
-                    self.device.emulator_stop()
-                exit(1)
+            if self._handle_task_failure(task, success):
+                del_cached_property(self, 'config')
+                continue
 
-            if success:
-                del_cached_property(self, 'config')
-                continue
-            elif self.config.script.error.handle_error:
-                # self.config.task_delay(success=False)
-                del_cached_property(self, 'config')
-                # self.checker.check_now()
-                continue
-            else:
-                break
+            del_cached_property(self, 'config')
+            continue
 
     def start_loop(self) -> None:
         """
