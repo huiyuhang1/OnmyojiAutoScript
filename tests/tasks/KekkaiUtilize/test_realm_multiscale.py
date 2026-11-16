@@ -8,7 +8,8 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-from module.atom.image import RuleImage, set_roi_match_padding
+from module.atom.image import RuleImage
+from module.base.utils import expand_roi
 from tasks.Component.Costume.config import CarpBannerType
 from tasks.Component.Costume.costume_base import CostumeBase
 from tasks.Component.CostumeCarpBanner.assets import CostumeCarpBannerAssets
@@ -60,11 +61,11 @@ def configured_rules():
 
 class RealmMultiScaleTests(unittest.TestCase):
     def tearDown(self):
-        set_roi_match_padding(0)
+        pass  # Search padding is now applied at construction.
 
     def test_all_seven_visible_elements_match_at_correct_locations(self):
         for padding in (0, 2):
-            set_roi_match_padding(padding)
+            pass  # Fixed construction-time padding
             for name, rule in configured_rules().items():
                 with self.subTest(padding=padding, name=name):
                     self.assertTrue(rule.match(screenshot(), threshold=0.6 if name == 'I_BOX_EXP' else None))
@@ -77,7 +78,7 @@ class RealmMultiScaleTests(unittest.TestCase):
 
     def test_missing_target_is_not_accepted(self):
         for padding in (0, 2):
-            set_roi_match_padding(padding)
+            pass  # Fixed construction-time padding
             for name, rule in configured_rules().items():
                 with self.subTest(padding=padding, name=name):
                     image = screenshot()
@@ -103,11 +104,11 @@ class RealmMultiScaleTests(unittest.TestCase):
             'I_UTILIZE_EXP': (500, 65, 220, 280),
         }
         for name, roi in expected.items():
-            self.assertEqual(tuple(getattr(KekkaiUtilizeAssets, name).roi_back), roi)
+            self.assertEqual(tuple(getattr(KekkaiUtilizeAssets, name).roi_back), expand_roi(roi))
             if name.startswith('I_SHI_'):
                 for skin in range(1, 4):
                     self.assertEqual(tuple(getattr(CostumeCarpBannerAssets,
-                                                  name + '_' + str(skin)).roi_back), roi)
+                                                  name + '_' + str(skin)).roi_back), expand_roi(roi))
 
     def test_collected_bottle_does_not_match_white_animals_at_task_threshold(self):
         fixture = Path(__file__).parent / 'fixtures/collected_bottle_animals.png'
@@ -116,7 +117,7 @@ class RealmMultiScaleTests(unittest.TestCase):
         image = np.zeros((720, 1280, 3), dtype=np.uint8)
         image[280:640, 790:1150] = crop
         for padding in (0, 2):
-            set_roi_match_padding(padding)
+            pass  # Fixed construction-time padding
             for name in ('I_BOX_EXP', 'I_BOX_EXP_MAX'):
                 for roi in ((875, 285, 255, 240), (790, 480, 350, 150)):
                     rule = deepcopy(getattr(KekkaiUtilizeAssets, name))
@@ -212,7 +213,7 @@ class RealmMultiScaleTests(unittest.TestCase):
                 with self.subTest(file=rel, name=row['itemName']):
                     rule = getattr(assets, 'I_' + row['itemName'].upper())
                     self.assertEqual(rule.method, row['method'])
-                    self.assertEqual(tuple(rule.roi_back), tuple(map(int, row['roiBack'].split(','))))
+                    self.assertEqual(tuple(rule.roi_back), expand_roi(tuple(map(int, row['roiBack'].split(',')))))
                     self.assertEqual(rule.threshold, row['threshold'])
 
 

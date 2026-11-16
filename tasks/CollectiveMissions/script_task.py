@@ -265,12 +265,17 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
         # 双倍活动时会领两次；若只有单次奖励，超时后继续避免卡死
         reward_number = 0
         second_reward_wait = None
+        check_timer = Timer(5).start()
         while 1:
             self.screenshot()
 
             if reward_number >= 2:
                 break
+            if reward_number == 0 and check_timer.reached():
+                logger.warn('Donate timeout')
+                break
             if self.ui_reward_appear_click(False):
+                check_timer.reset()
                 reward_number += 1
                 if reward_number == 1:
                     second_reward_wait = Timer(10)
@@ -279,7 +284,8 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
             if reward_number == 1 and second_reward_wait is not None and second_reward_wait.reached():
                 logger.info('Donate: only one reward popup; skip waiting for double')
                 break
-            if self.appear_then_click(self.I_CM_PRESENT, interval=1):
+            if self.appear_then_click(self.I_CM_PRESENT, interval=1) or self.appear_then_click(self.I_CM_REWARDS, interval=0.5):
+                check_timer.reset()
                 continue
         self.ui_reward_appear_click(True)
         logger.info('Donate finished')
@@ -305,6 +311,9 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
             if click_cnt > 20:
                 logger.warning(f'click_cnt={click_cnt}')
                 return False
+            if click_cnt == 8:
+                self.device.click_record_clear()
+
             if not (self.I_CM_SWITCH.match_brightness(self.device.image) and
                 self.I_CM_SWITCH.match_brightness(self.device.image) and
                 self.I_CM_SWITCH.match_mean_color(self.device.image, color=(134, 107, 83))

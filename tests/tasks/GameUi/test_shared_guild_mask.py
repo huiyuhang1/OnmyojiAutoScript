@@ -14,7 +14,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from module.atom.image import RuleImage, set_roi_match_padding
+from module.atom.image import RuleImage
+from module.base.utils import expand_roi
 from tasks.GameUi.assets import GameUiAssets
 from tasks.Component.Costume.config import ThemeType
 from tasks.Component.CostumeTheme.theme import apply_theme
@@ -28,15 +29,15 @@ OTHER_ENTRANCES = ('COLLECTION', 'TRAVEL', 'TEAM', 'MALL', 'DAILY', 'FRIENDS',
 class SharedGuildMaskTests(unittest.TestCase):
     def setUp(self):
         apply_theme(ThemeType.COSTUME_THEME_DEFAULT)
-        set_roi_match_padding(0)
+        pass  # Search padding is now applied at construction.
 
     def tearDown(self):
         apply_theme(ThemeType.COSTUME_THEME_DEFAULT)
-        set_roi_match_padding(0)
+        pass  # Search padding is now applied at construction.
 
     def rule(self, method='Masked template matching'):
         source = GameUiAssets.I_MAIN_GOTO_GUILD
-        return RuleImage(tuple(source.roi_front), source.roi_back, method,
+        return RuleImage(tuple(source.roi_front), (495, 590, 120, 100), method,
                          source.threshold, source.file)
 
     def frame(self, state):
@@ -53,7 +54,7 @@ class SharedGuildMaskTests(unittest.TestCase):
         self.assertEqual(item['method'], 'Masked template matching')
         self.assertEqual(GameUiAssets.I_MAIN_GOTO_GUILD.method, item['method'])
         self.assertEqual(rule.threshold, 0.7)
-        self.assertEqual(rule.roi_back, (495, 590, 120, 100))
+        self.assertEqual(rule.roi_back, expand_roi((495, 590, 120, 100)))
         self.assertEqual(rule.mask.shape, rule.image.shape[:2])
         self.assertEqual(set(np.unique(rule.mask)), {0, 255})
         self.assertGreater(np.count_nonzero(rule.mask), 200)
@@ -64,7 +65,7 @@ class SharedGuildMaskTests(unittest.TestCase):
     def test_new_theme_open_hits_at_guild_not_another_icon(self):
         for pad in (0, 2):
             with self.subTest(padding=pad):
-                set_roi_match_padding(pad)
+                pass  # Search padding is now applied at construction.
                 rule = self.rule()
                 self.assertTrue(rule.match(self.frame('open')))
                 self.assertGreater(rule.last_score, 0.9)
@@ -78,7 +79,7 @@ class SharedGuildMaskTests(unittest.TestCase):
     def test_closed_scroll_is_not_a_guild_entrance(self):
         for pad in (0, 2):
             with self.subTest(padding=pad):
-                set_roi_match_padding(pad)
+                pass  # Search padding is now applied at construction.
                 rule = self.rule()
                 self.assertFalse(rule.match(self.frame('closed')))
                 self.assertLess(rule.last_score, rule.threshold)
