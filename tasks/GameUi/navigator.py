@@ -28,12 +28,13 @@ from tasks.GameUi.common import infer_tasks_category_from_parts, infer_tasks_cat
 from tasks.GameUi.matcher import collect_rule_images
 from tasks.GameUi.page_definition import Page, Transition, sort_pages_by_priority
 from tasks.GameUi.registry import PageRegistry
+from tasks.GameUi.scene_download import SceneDownloadPopup
 from tasks.GameUi.session import NavigatorSession
 from tasks.SixRealms.assets import SixRealmsAssets
 from tasks.base_task import BaseTask
 
 
-class GameUi(BaseTask, GameUiAssets):
+class GameUi(SceneDownloadPopup, BaseTask, GameUiAssets):
     """页面识别、导航与未知页恢复的统一入口。"""
 
     REPEATED_TRANSITION_FAILURE_THRESHOLD = 3
@@ -511,8 +512,13 @@ class GameUi(BaseTask, GameUiAssets):
 
         action_timer = Timer(6.0).start()
         action_done = False
+        hunt_entry = source.key == "page_town" and destination.key in ("page_hunt", "page_hunt_kirin")
         while not action_timer.reached():
-            if self._execute_action(transition.action, interval=0.8, skip_first_screenshot=False):
+            if hunt_entry:
+                self.screenshot()
+                if self.cancel_scene_download():
+                    continue
+            if self._execute_action(transition.action, interval=0.8, skip_first_screenshot=hunt_entry):
                 action_done = True
                 break
 
@@ -524,6 +530,7 @@ class GameUi(BaseTask, GameUiAssets):
             and source.key == "page_town"
             and isinstance(transition.action, (RuleImage, RuleGif))
             and self.confirm_page(source, skip_first_screenshot=False)
+            and not (hunt_entry and self.cancel_scene_download())
         ):
             x, y, width, height = transition.action.roi_front
             click_x = x + width // 2
