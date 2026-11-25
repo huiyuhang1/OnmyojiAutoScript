@@ -1,6 +1,7 @@
 # This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
+from pathlib import Path
 import random
 from module.base.timer import Timer
 from module.exception import RequestHumanTakeover, GameTooManyClickError, GameStuckError
@@ -163,20 +164,24 @@ class LoginHandler(BaseTask, RestartAssets, GameUiAssets, GeneralBuffAssets):
                 # https://github.com/runhey/OnmyojiAutoScript/issues/585
                 self.device.click(x=106, y=535)
                 
-            # 点击’进入游戏‘
-            if not self.appear(self.I_LOGIN_8):
                 continue
-            
+
             # 登录体验服时，点击“进入游戏”速度过快，可能会出现体验服的弹窗
             if self.appear(self.I_EARLY_SERVER):
                 if self.appear_then_click(self.I_EARLY_SERVER_CANCEL):
                     logger.info('Cancel switch from early server to normal server')
                     continue
-            if self.ocr_appear_click(self.O_LOGIN_ENTER_GAME_ORIGIN, interval=3) or self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3):
+            if self._click_enter_game():
                 self.wait_until_appear(self.I_LOGIN_SPECIFIC_SERVE, True, wait_time=5)
                 continue
 
         return login_success
+
+    def _click_enter_game(self) -> bool:
+        # 完整按钮文字可以独立确认；较短的“进入”仍需登录页图标佐证。
+        if self.ocr_appear_click(self.O_LOGIN_ENTER_GAME_ORIGIN, interval=3):
+            return True
+        return self.appear(self.I_LOGIN_8) and self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3)
 
     def app_handle_login(self) -> bool:
         for _ in range(2):
@@ -192,6 +197,13 @@ class LoginHandler(BaseTask, RestartAssets, GameUiAssets, GeneralBuffAssets):
                 return True
             except (GameTooManyClickError, GameStuckError) as e:
                 logger.warning(e)
+                try:
+                    path = Path('log/error') / f'login_retry_{time.time_ns()}.png'
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    self.device.image_save(str(path))
+                    logger.info(f'登录重试前截图: {path}')
+                except Exception as exc:
+                    logger.warning(f'保存登录截图失败: {exc}')
                 self.device.app_stop()
                 self.device.app_start()
                 continue
